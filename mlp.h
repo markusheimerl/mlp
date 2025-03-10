@@ -37,234 +37,234 @@ typedef struct {
     int hidden_dim;
     int output_dim;
     int batch_size;
-} Net;
+} MLP;
 
 // Initialize the network with configurable dimensions
-Net* init_net(int input_dim, int hidden_dim, int output_dim, int batch_size) {
-    Net* net = (Net*)malloc(sizeof(Net));
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
+    MLP* mlp = (MLP*)malloc(sizeof(MLP));
     
     // Store dimensions
-    net->input_dim = input_dim;
-    net->hidden_dim = hidden_dim;
-    net->output_dim = output_dim;
-    net->batch_size = batch_size;
+    mlp->input_dim = input_dim;
+    mlp->hidden_dim = hidden_dim;
+    mlp->output_dim = output_dim;
+    mlp->batch_size = batch_size;
     
     // Initialize Adam parameters
-    net->beta1 = 0.9f;
-    net->beta2 = 0.999f;
-    net->epsilon = 1e-8f;
-    net->t = 0;
-    net->weight_decay = 0.01f;
+    mlp->beta1 = 0.9f;
+    mlp->beta2 = 0.999f;
+    mlp->epsilon = 1e-8f;
+    mlp->t = 0;
+    mlp->weight_decay = 0.01f;
     
     // Allocate and initialize weights and gradients
-    net->fc1_weight = (float*)malloc(hidden_dim * input_dim * sizeof(float));
-    net->fc2_weight = (float*)malloc(output_dim * hidden_dim * sizeof(float));
-    net->fc1_weight_grad = (float*)malloc(hidden_dim * input_dim * sizeof(float));
-    net->fc2_weight_grad = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    mlp->fc1_weight = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    mlp->fc2_weight = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    mlp->fc1_weight_grad = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    mlp->fc2_weight_grad = (float*)malloc(output_dim * hidden_dim * sizeof(float));
     
     // Allocate Adam buffers
-    net->fc1_m = (float*)calloc(hidden_dim * input_dim, sizeof(float));
-    net->fc1_v = (float*)calloc(hidden_dim * input_dim, sizeof(float));
-    net->fc2_m = (float*)calloc(output_dim * hidden_dim, sizeof(float));
-    net->fc2_v = (float*)calloc(output_dim * hidden_dim, sizeof(float));
+    mlp->fc1_m = (float*)calloc(hidden_dim * input_dim, sizeof(float));
+    mlp->fc1_v = (float*)calloc(hidden_dim * input_dim, sizeof(float));
+    mlp->fc2_m = (float*)calloc(output_dim * hidden_dim, sizeof(float));
+    mlp->fc2_v = (float*)calloc(output_dim * hidden_dim, sizeof(float));
     
     // Allocate helper arrays
-    net->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    net->predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
-    net->error = (float*)malloc(batch_size * output_dim * sizeof(float));
-    net->pre_activation = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    net->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->error = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->pre_activation = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     
     // Initialize weights
     float scale1 = 1.0f / sqrt(input_dim);
     float scale2 = 1.0f / sqrt(hidden_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
-        net->fc1_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale1;
+        mlp->fc1_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale1;
     }
     
     for (int i = 0; i < output_dim * hidden_dim; i++) {
-        net->fc2_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale2;
+        mlp->fc2_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale2;
     }
     
-    return net;
+    return mlp;
 }
 
 // Free network memory
-void free_net(Net* net) {
-    free(net->fc1_weight);
-    free(net->fc2_weight);
-    free(net->fc1_weight_grad);
-    free(net->fc2_weight_grad);
-    free(net->fc1_m);
-    free(net->fc1_v);
-    free(net->fc2_m);
-    free(net->fc2_v);
-    free(net->layer1_output);
-    free(net->predictions);
-    free(net->error);
-    free(net->pre_activation);
-    free(net->error_hidden);
-    free(net);
+void free_mlp(MLP* mlp) {
+    free(mlp->fc1_weight);
+    free(mlp->fc2_weight);
+    free(mlp->fc1_weight_grad);
+    free(mlp->fc2_weight_grad);
+    free(mlp->fc1_m);
+    free(mlp->fc1_v);
+    free(mlp->fc2_m);
+    free(mlp->fc2_v);
+    free(mlp->layer1_output);
+    free(mlp->predictions);
+    free(mlp->error);
+    free(mlp->pre_activation);
+    free(mlp->error_hidden);
+    free(mlp);
 }
 
 // Forward pass
-void forward_pass(Net* net, float* X) {
+void forward_pass_mlp(MLP* mlp, float* X) {
     // Z = XW₁
     cblas_sgemm(CblasRowMajor,
                 CblasNoTrans,
                 CblasNoTrans,
-                net->batch_size,
-                net->hidden_dim,
-                net->input_dim,
+                mlp->batch_size,
+                mlp->hidden_dim,
+                mlp->input_dim,
                 1.0f,
                 X,
-                net->input_dim,
-                net->fc1_weight,
-                net->hidden_dim,
+                mlp->input_dim,
+                mlp->fc1_weight,
+                mlp->hidden_dim,
                 0.0f,
-                net->layer1_output,
-                net->hidden_dim);
+                mlp->layer1_output,
+                mlp->hidden_dim);
     
     // Store Z for backward pass
-    memcpy(net->pre_activation, net->layer1_output, 
-           net->batch_size * net->hidden_dim * sizeof(float));
+    memcpy(mlp->pre_activation, mlp->layer1_output, 
+           mlp->batch_size * mlp->hidden_dim * sizeof(float));
     
     // A = Zσ(Z)
-    for (int i = 0; i < net->batch_size * net->hidden_dim; i++) {
-        net->layer1_output[i] = net->layer1_output[i] / (1.0f + expf(-net->layer1_output[i]));
+    for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
+        mlp->layer1_output[i] = mlp->layer1_output[i] / (1.0f + expf(-mlp->layer1_output[i]));
     }
     
     // Y = AW₂
     cblas_sgemm(CblasRowMajor,
                 CblasNoTrans,
                 CblasNoTrans,
-                net->batch_size,
-                net->output_dim,
-                net->hidden_dim,
+                mlp->batch_size,
+                mlp->output_dim,
+                mlp->hidden_dim,
                 1.0f,
-                net->layer1_output,
-                net->hidden_dim,
-                net->fc2_weight,
-                net->output_dim,
+                mlp->layer1_output,
+                mlp->hidden_dim,
+                mlp->fc2_weight,
+                mlp->output_dim,
                 0.0f,
-                net->predictions,
-                net->output_dim);
+                mlp->predictions,
+                mlp->output_dim);
 }
 
 // Calculate loss
-float calculate_loss(Net* net, float* y) {
+float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
-    for (int i = 0; i < net->batch_size * net->output_dim; i++) {
-        net->error[i] = net->predictions[i] - y[i];
-        loss += net->error[i] * net->error[i];
+    for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
+        mlp->error[i] = mlp->predictions[i] - y[i];
+        loss += mlp->error[i] * mlp->error[i];
     }
-    return loss / (net->batch_size * net->output_dim);
+    return loss / (mlp->batch_size * mlp->output_dim);
 }
 
 // Zero gradients
-void zero_gradients(Net* net) {
-    memset(net->fc1_weight_grad, 0, net->hidden_dim * net->input_dim * sizeof(float));
-    memset(net->fc2_weight_grad, 0, net->output_dim * net->hidden_dim * sizeof(float));
+void zero_gradients_mlp(MLP* mlp) {
+    memset(mlp->fc1_weight_grad, 0, mlp->hidden_dim * mlp->input_dim * sizeof(float));
+    memset(mlp->fc2_weight_grad, 0, mlp->output_dim * mlp->hidden_dim * sizeof(float));
 }
 
 // Backward pass
-void backward_pass(Net* net, float* X) {
+void backward_pass_mlp(MLP* mlp, float* X) {
     // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
     cblas_sgemm(CblasRowMajor,
                 CblasTrans,
                 CblasNoTrans,
-                net->hidden_dim,
-                net->output_dim,
-                net->batch_size,
+                mlp->hidden_dim,
+                mlp->output_dim,
+                mlp->batch_size,
                 1.0f,
-                net->layer1_output,
-                net->hidden_dim,
-                net->error,
-                net->output_dim,
+                mlp->layer1_output,
+                mlp->hidden_dim,
+                mlp->error,
+                mlp->output_dim,
                 0.0f,
-                net->fc2_weight_grad,
-                net->output_dim);
+                mlp->fc2_weight_grad,
+                mlp->output_dim);
     
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor,
                 CblasNoTrans,
                 CblasTrans,
-                net->batch_size,
-                net->hidden_dim,
-                net->output_dim,
+                mlp->batch_size,
+                mlp->hidden_dim,
+                mlp->output_dim,
                 1.0f,
-                net->error,
-                net->output_dim,
-                net->fc2_weight,
-                net->output_dim,
+                mlp->error,
+                mlp->output_dim,
+                mlp->fc2_weight,
+                mlp->output_dim,
                 0.0f,
-                net->error_hidden,
-                net->hidden_dim);
+                mlp->error_hidden,
+                mlp->hidden_dim);
     
     // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
-    for (int i = 0; i < net->batch_size * net->hidden_dim; i++) {
-        float sigmoid = 1.0f / (1.0f + expf(-net->pre_activation[i]));
-        net->error_hidden[i] *= sigmoid + net->pre_activation[i] * sigmoid * (1.0f - sigmoid);
+    for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
+        float sigmoid = 1.0f / (1.0f + expf(-mlp->pre_activation[i]));
+        mlp->error_hidden[i] *= sigmoid + mlp->pre_activation[i] * sigmoid * (1.0f - sigmoid);
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
     cblas_sgemm(CblasRowMajor,
                 CblasTrans,
                 CblasNoTrans,
-                net->input_dim,
-                net->hidden_dim,
-                net->batch_size,
+                mlp->input_dim,
+                mlp->hidden_dim,
+                mlp->batch_size,
                 1.0f,
                 X,
-                net->input_dim,
-                net->error_hidden,
-                net->hidden_dim,
+                mlp->input_dim,
+                mlp->error_hidden,
+                mlp->hidden_dim,
                 0.0f,
-                net->fc1_weight_grad,
-                net->hidden_dim);
+                mlp->fc1_weight_grad,
+                mlp->hidden_dim);
 }
 
 // Update weights using AdamW
-void update_weights(Net* net, float learning_rate) {
-    net->t++;  // Increment time step
+void update_weights_mlp(MLP* mlp, float learning_rate) {
+    mlp->t++;  // Increment time step
     
-    float beta1_t = powf(net->beta1, net->t);
-    float beta2_t = powf(net->beta2, net->t);
+    float beta1_t = powf(mlp->beta1, mlp->t);
+    float beta2_t = powf(mlp->beta2, mlp->t);
     float alpha_t = learning_rate * sqrtf(1.0f - beta2_t) / (1.0f - beta1_t);
     
     // Update fc1 weights
-    for (int i = 0; i < net->hidden_dim * net->input_dim; i++) {
-        float grad = net->fc1_weight_grad[i] / net->batch_size;
+    for (int i = 0; i < mlp->hidden_dim * mlp->input_dim; i++) {
+        float grad = mlp->fc1_weight_grad[i] / mlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
-        net->fc1_m[i] = net->beta1 * net->fc1_m[i] + (1.0f - net->beta1) * grad;
+        mlp->fc1_m[i] = mlp->beta1 * mlp->fc1_m[i] + (1.0f - mlp->beta1) * grad;
         // v = β₂v + (1-β₂)(∂L/∂W)²
-        net->fc1_v[i] = net->beta2 * net->fc1_v[i] + (1.0f - net->beta2) * grad * grad;
+        mlp->fc1_v[i] = mlp->beta2 * mlp->fc1_v[i] + (1.0f - mlp->beta2) * grad * grad;
         
-        float update = alpha_t * net->fc1_m[i] / (sqrtf(net->fc1_v[i]) + net->epsilon);
+        float update = alpha_t * mlp->fc1_m[i] / (sqrtf(mlp->fc1_v[i]) + mlp->epsilon);
         // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
-        net->fc1_weight[i] = net->fc1_weight[i] * (1.0f - learning_rate * net->weight_decay) - update;
+        mlp->fc1_weight[i] = mlp->fc1_weight[i] * (1.0f - learning_rate * mlp->weight_decay) - update;
     }
     
     // Update fc2 weights
-    for (int i = 0; i < net->output_dim * net->hidden_dim; i++) {
-        float grad = net->fc2_weight_grad[i] / net->batch_size;
+    for (int i = 0; i < mlp->output_dim * mlp->hidden_dim; i++) {
+        float grad = mlp->fc2_weight_grad[i] / mlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
-        net->fc2_m[i] = net->beta1 * net->fc2_m[i] + (1.0f - net->beta1) * grad;
+        mlp->fc2_m[i] = mlp->beta1 * mlp->fc2_m[i] + (1.0f - mlp->beta1) * grad;
         // v = β₂v + (1-β₂)(∂L/∂W)²
-        net->fc2_v[i] = net->beta2 * net->fc2_v[i] + (1.0f - net->beta2) * grad * grad;
+        mlp->fc2_v[i] = mlp->beta2 * mlp->fc2_v[i] + (1.0f - mlp->beta2) * grad * grad;
         
-        float update = alpha_t * net->fc2_m[i] / (sqrtf(net->fc2_v[i]) + net->epsilon);
+        float update = alpha_t * mlp->fc2_m[i] / (sqrtf(mlp->fc2_v[i]) + mlp->epsilon);
         // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
-        net->fc2_weight[i] = net->fc2_weight[i] * (1.0f - learning_rate * net->weight_decay) - update;
+        mlp->fc2_weight[i] = mlp->fc2_weight[i] * (1.0f - learning_rate * mlp->weight_decay) - update;
     }
 }
 
 // Function to save model weights to binary file
-void save_model(Net* net, const char* filename) {
+void save_mlp(MLP* mlp, const char* filename) {
     FILE* file = fopen(filename, "wb");
     if (!file) {
         printf("Error opening file for writing: %s\n", filename);
@@ -272,28 +272,28 @@ void save_model(Net* net, const char* filename) {
     }
     
     // Save dimensions
-    fwrite(&net->input_dim, sizeof(int), 1, file);
-    fwrite(&net->hidden_dim, sizeof(int), 1, file);
-    fwrite(&net->output_dim, sizeof(int), 1, file);
-    fwrite(&net->batch_size, sizeof(int), 1, file);
+    fwrite(&mlp->input_dim, sizeof(int), 1, file);
+    fwrite(&mlp->hidden_dim, sizeof(int), 1, file);
+    fwrite(&mlp->output_dim, sizeof(int), 1, file);
+    fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
     // Save weights
-    fwrite(net->fc1_weight, sizeof(float), net->hidden_dim * net->input_dim, file);
-    fwrite(net->fc2_weight, sizeof(float), net->output_dim * net->hidden_dim, file);
+    fwrite(mlp->fc1_weight, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc2_weight, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
     
     // Save Adam state
-    fwrite(&net->t, sizeof(int), 1, file);
-    fwrite(net->fc1_m, sizeof(float), net->hidden_dim * net->input_dim, file);
-    fwrite(net->fc1_v, sizeof(float), net->hidden_dim * net->input_dim, file);
-    fwrite(net->fc2_m, sizeof(float), net->output_dim * net->hidden_dim, file);
-    fwrite(net->fc2_v, sizeof(float), net->output_dim * net->hidden_dim, file);
+    fwrite(&mlp->t, sizeof(int), 1, file);
+    fwrite(mlp->fc1_m, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc1_v, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc2_m, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+    fwrite(mlp->fc2_v, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
 
     fclose(file);
     printf("Model saved to %s\n", filename);
 }
 
 // Function to load model weights from binary file
-Net* load_model(const char* filename) {
+MLP* load_mlp(const char* filename) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
@@ -308,23 +308,23 @@ Net* load_model(const char* filename) {
     fread(&batch_size, sizeof(int), 1, file);
     
     // Initialize network
-    Net* net = init_net(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
     // Load weights
-    fread(net->fc1_weight, sizeof(float), hidden_dim * input_dim, file);
-    fread(net->fc2_weight, sizeof(float), output_dim * hidden_dim, file);
+    fread(mlp->fc1_weight, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc2_weight, sizeof(float), output_dim * hidden_dim, file);
     
     // Load Adam state
-    fread(&net->t, sizeof(int), 1, file);
-    fread(net->fc1_m, sizeof(float), hidden_dim * input_dim, file);
-    fread(net->fc1_v, sizeof(float), hidden_dim * input_dim, file);
-    fread(net->fc2_m, sizeof(float), output_dim * hidden_dim, file);
-    fread(net->fc2_v, sizeof(float), output_dim * hidden_dim, file);
+    fread(&mlp->t, sizeof(int), 1, file);
+    fread(mlp->fc1_m, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc1_v, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc2_m, sizeof(float), output_dim * hidden_dim, file);
+    fread(mlp->fc2_v, sizeof(float), output_dim * hidden_dim, file);
 
     fclose(file);
     printf("Model loaded from %s\n", filename);
     
-    return net;
+    return mlp;
 }
 
 #endif

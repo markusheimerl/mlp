@@ -21,7 +21,7 @@ int main() {
     generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim);
     
     // Initialize network
-    Net* net = init_net(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
     // Training parameters
     const int num_epochs = 10000;
@@ -30,17 +30,17 @@ int main() {
     // Training loop
     for (int epoch = 0; epoch < num_epochs; epoch++) {
         // Forward pass
-        forward_pass(net, X);
+        forward_pass_mlp(mlp, X);
         
         // Calculate loss
-        float loss = calculate_loss(net, y);
+        float loss = calculate_loss_mlp(mlp, y);
         
         // Backward pass
-        zero_gradients(net);
-        backward_pass(net, X);
+        zero_gradients_mlp(mlp);
+        backward_pass_mlp(mlp, X);
         
         // Update weights
-        update_weights(net, learning_rate);
+        update_weights_mlp(mlp, learning_rate);
         
         // Print progress
         if ((epoch + 1) % 100 == 0) {
@@ -57,20 +57,20 @@ int main() {
              localtime(&now));
 
     // Save model and data with timestamped filenames
-    save_model(net, model_fname);
+    save_mlp(mlp, model_fname);
     save_data_to_csv(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
 
     // Load the model back
-    net = load_model(model_fname);
+    mlp = load_mlp(model_fname);
     
     // Forward pass with loaded model
-    forward_pass(net, X);
+    forward_pass_mlp(mlp, X);
     
     // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss(net, y);
+    float verification_loss = calculate_loss_mlp(mlp, y);
     printf("Loss with loaded model: %.8f\n", verification_loss);
 
     printf("\nEvaluating model performance...\n");
@@ -87,7 +87,7 @@ int main() {
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            float diff_res = y[j * output_dim + i] - net->predictions[j * output_dim + i];
+            float diff_res = y[j * output_dim + i] - mlp->predictions[j * output_dim + i];
             float diff_tot = y[j * output_dim + i] - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
@@ -104,7 +104,7 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = net->predictions[j * output_dim + i];
+            float pred = mlp->predictions[j * output_dim + i];
             float actual = y[j * output_dim + i];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
@@ -113,7 +113,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            mae += fabs(net->predictions[j * output_dim + i] - y[j * output_dim + i]);
+            mae += fabs(mlp->predictions[j * output_dim + i] - y[j * output_dim + i]);
         }
         mae /= num_samples;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
@@ -122,7 +122,7 @@ int main() {
     // Cleanup
     free(X);
     free(y);
-    free_net(net);
+    free_mlp(mlp);
     
     return 0;
 }
