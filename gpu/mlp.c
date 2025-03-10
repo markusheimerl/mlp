@@ -20,7 +20,7 @@ int main() {
     generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim);
     
     // Initialize network
-    Net* net = init_net(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
     // Training parameters
     const int num_epochs = 10000;
@@ -29,17 +29,17 @@ int main() {
     // Training loop
     for (int epoch = 0; epoch < num_epochs; epoch++) {
         // Forward pass
-        forward_pass(net, X);
+        forward_pass_mlp(mlp, X);
         
         // Calculate loss
-        float loss = calculate_loss(net, y);
+        float loss = calculate_loss_mlp(mlp, y);
         
         // Backward pass
-        zero_gradients(net);
-        backward_pass(net, X);
+        zero_gradients_mlp(mlp);
+        backward_pass_mlp(mlp, X);
         
         // Update weights
-        update_weights(net, learning_rate);
+        update_weights_mlp(mlp, learning_rate);
         
         // Print progress
         if ((epoch + 1) % 100 == 0) {
@@ -56,28 +56,28 @@ int main() {
              localtime(&now));
 
     // Save model and data with timestamped filenames
-    save_model(net, model_fname);
+    save_mlp(mlp, model_fname);
     save_data_to_csv(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
 
     // Load the model back
-    net = load_model(model_fname);
+    mlp = load_mlp(model_fname);
     
     // Allocate host memory for predictions
     float* h_predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
 
     // Forward pass with loaded model
-    forward_pass(net, X);
+    forward_pass_mlp(mlp, X);
     
     // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(h_predictions, net->d_predictions, 
+    CHECK_CUDA(cudaMemcpy(h_predictions, mlp->d_predictions, 
                          num_samples * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
     // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss(net, y);
+    float verification_loss = calculate_loss_mlp(mlp, y);
     printf("Loss with loaded model: %.8f\n", verification_loss);
 
     printf("\nEvaluating model performance...\n");
@@ -130,7 +130,7 @@ int main() {
     free(X);
     free(y);
     free(h_predictions);
-    free_net(net);
+    free_mlp(mlp);
     
     return 0;
 }
