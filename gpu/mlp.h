@@ -460,23 +460,55 @@ void save_mlp(MLP* mlp, const char* filename) {
     fwrite(mlp->h_fc2_weight, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
     fwrite(&mlp->t, sizeof(int), 1, file);
     
+    // Also save Adam state variables
+    float* h_fc1_m = (float*)malloc(mlp->hidden_dim * mlp->input_dim * sizeof(float));
+    float* h_fc1_v = (float*)malloc(mlp->hidden_dim * mlp->input_dim * sizeof(float));
+    float* h_fc2_m = (float*)malloc(mlp->output_dim * mlp->hidden_dim * sizeof(float));
+    float* h_fc2_v = (float*)malloc(mlp->output_dim * mlp->hidden_dim * sizeof(float));
+    
+    CHECK_CUDA(cudaMemcpy(h_fc1_m, mlp->d_fc1_m, 
+                         mlp->hidden_dim * mlp->input_dim * sizeof(float),
+                         cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_fc1_v, mlp->d_fc1_v, 
+                         mlp->hidden_dim * mlp->input_dim * sizeof(float),
+                         cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_fc2_m, mlp->d_fc2_m, 
+                         mlp->output_dim * mlp->hidden_dim * sizeof(float),
+                         cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_fc2_v, mlp->d_fc2_v, 
+                         mlp->output_dim * mlp->hidden_dim * sizeof(float),
+                         cudaMemcpyDeviceToHost));
+    
+    fwrite(h_fc1_m, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(h_fc1_v, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(h_fc2_m, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+    fwrite(h_fc2_v, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+    
+    free(h_fc1_m);
+    free(h_fc1_v);
+    free(h_fc2_m);
+    free(h_fc2_v);
+    
     fclose(file);
     printf("Model saved to %s\n", filename);
 }
 
 // Load model weights from binary file
-MLP* load_mlp(const char* filename) {
+MLP* load_mlp(const char* filename, int custom_batch_size) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
         return NULL;
     }
     
-    int input_dim, hidden_dim, output_dim, batch_size;
+    int input_dim, hidden_dim, output_dim, stored_batch_size;
     fread(&input_dim, sizeof(int), 1, file);
     fread(&hidden_dim, sizeof(int), 1, file);
     fread(&output_dim, sizeof(int), 1, file);
-    fread(&batch_size, sizeof(int), 1, file);
+    fread(&stored_batch_size, sizeof(int), 1, file);
+    
+    // Use custom_batch_size if provided, otherwise use stored value
+    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
@@ -491,6 +523,36 @@ MLP* load_mlp(const char* filename) {
     CHECK_CUDA(cudaMemcpy(mlp->d_fc2_weight, mlp->h_fc2_weight,
                          output_dim * hidden_dim * sizeof(float),
                          cudaMemcpyHostToDevice));
+    
+    // Load Adam state variables
+    float* h_fc1_m = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    float* h_fc1_v = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    float* h_fc2_m = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    float* h_fc2_v = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    
+    fread(h_fc1_m, sizeof(float), hidden_dim * input_dim, file);
+    fread(h_fc1_v, sizeof(float), hidden_dim * input_dim, file);
+    fread(h_fc2_m, sizeof(float), output_dim * hidden_dim, file);
+    fread(h_fc2_v, sizeof(float), output_dim * hidden_dim, file);
+    
+    // Copy Adam state to device
+    CHECK_CUDA(cudaMemcpy(mlp->d_fc1_m, h_fc1_m,
+                         hidden_dim * input_dim * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_fc1_v, h_fc1_v,
+                         hidden_dim * input_dim * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_fc2_m, h_fc2_m,
+                         output_dim * hidden_dim * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_fc2_v, h_fc2_v,
+                         output_dim * hidden_dim * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    
+    free(h_fc1_m);
+    free(h_fc1_v);
+    free(h_fc2_m);
+    free(h_fc2_v);
     
     fclose(file);
     printf("Model loaded from %s\n", filename);

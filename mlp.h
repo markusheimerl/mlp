@@ -293,7 +293,7 @@ void save_mlp(MLP* mlp, const char* filename) {
 }
 
 // Function to load model weights from binary file
-MLP* load_mlp(const char* filename) {
+MLP* load_mlp(const char* filename, int custom_batch_size) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
@@ -301,11 +301,14 @@ MLP* load_mlp(const char* filename) {
     }
     
     // Read dimensions
-    int input_dim, hidden_dim, output_dim, batch_size;
+    int input_dim, hidden_dim, output_dim, stored_batch_size;
     fread(&input_dim, sizeof(int), 1, file);
     fread(&hidden_dim, sizeof(int), 1, file);
     fread(&output_dim, sizeof(int), 1, file);
-    fread(&batch_size, sizeof(int), 1, file);
+    fread(&stored_batch_size, sizeof(int), 1, file);
+    
+    // Use custom_batch_size if provided, otherwise use stored value
+    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);

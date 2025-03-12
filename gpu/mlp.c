@@ -62,22 +62,22 @@ int main() {
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
 
-    // Load the model back
-    mlp = load_mlp(model_fname);
+    // Load the model back with original batch_size
+    MLP* loaded_mlp = load_mlp(model_fname, batch_size);
     
     // Allocate host memory for predictions
     float* h_predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
 
     // Forward pass with loaded model
-    forward_pass_mlp(mlp, X);
+    forward_pass_mlp(loaded_mlp, X);
     
     // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(h_predictions, mlp->d_predictions, 
+    CHECK_CUDA(cudaMemcpy(h_predictions, loaded_mlp->d_predictions, 
                          num_samples * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
     // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss_mlp(mlp, y);
+    float verification_loss = calculate_loss_mlp(loaded_mlp, y);
     printf("Loss with loaded model: %.8f\n", verification_loss);
 
     printf("\nEvaluating model performance...\n");
@@ -131,6 +131,7 @@ int main() {
     free(y);
     free(h_predictions);
     free_mlp(mlp);
+    free_mlp(loaded_mlp);
     
     return 0;
 }
