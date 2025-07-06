@@ -27,24 +27,27 @@ int main() {
     const float learning_rate = 0.001f;
     
     // Training loop
-    for (int epoch = 0; epoch < num_epochs; epoch++) {
+    for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
         // Forward pass
         forward_pass_mlp(mlp, X);
         
         // Calculate loss
         float loss = calculate_loss_mlp(mlp, y);
-        
+
+        // Print progress
+        if (epoch > 0 && epoch % 100 == 0) {
+            printf("Epoch [%d/%d], Loss: %.8f\n", epoch, num_epochs, loss);
+        }
+
+        // Don't update weights after final evaluation
+        if (epoch == num_epochs) break;
+
         // Backward pass
         zero_gradients_mlp(mlp);
         backward_pass_mlp(mlp, X);
         
         // Update weights
         update_weights_mlp(mlp, learning_rate);
-        
-        // Print progress
-        if ((epoch + 1) % 100 == 0) {
-            printf("Epoch [%d/%d], Loss: %.8f\n", epoch + 1, num_epochs, loss);
-        }
     }
 
     // Get timestamp for filenames
