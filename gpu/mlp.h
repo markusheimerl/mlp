@@ -39,10 +39,9 @@ typedef struct {
     float* d_fc1_weight_grad; // hidden_dim x input_dim
     float* d_fc2_weight_grad; // output_dim x hidden_dim
     
-    // Host copies of weights and error
+    // Host copies of weights
     float* h_fc1_weight;
     float* h_fc2_weight;
-    float* h_error;
     
     // Device pointers for Adam parameters
     float* d_fc1_m;  // First moment for fc1
@@ -94,10 +93,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     // Initialize cuBLAS
     CHECK_CUBLAS(cublasCreate(&mlp->cublas_handle));
     
-    // Allocate host memory for weights and error
+    // Allocate host memory for weights
     mlp->h_fc1_weight = (float*)malloc(hidden_dim * input_dim * sizeof(float));
     mlp->h_fc2_weight = (float*)malloc(output_dim * hidden_dim * sizeof(float));
-    mlp->h_error = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights on host
     float scale1 = 1.0f / sqrt(input_dim);
@@ -168,7 +166,6 @@ void free_mlp(MLP* mlp) {
     // Free host memory
     free(mlp->h_fc1_weight);
     free(mlp->h_fc2_weight);
-    free(mlp->h_error);
     
     // Destroy cuBLAS handle
     cublasDestroy(mlp->cublas_handle);
@@ -195,6 +192,14 @@ __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activa
     }
 }
 
+// CUDA kernel for calculating error
+__global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        error[idx] = predictions[idx] - y[idx];
+    }
+}
+
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
     CHECK_CUDA(cudaMemcpy(mlp->d_X, X, mlp->batch_size * mlp->input_dim * sizeof(float), 
@@ -203,28 +208,28 @@ void forward_pass_mlp(MLP* mlp, float* X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // First layer
+    // Z = XW₁
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
+                            CUBLAS_OP_T,
                             CUBLAS_OP_N,
-                            CUBLAS_OP_N,
-                            mlp->hidden_dim,    // n
-                            mlp->batch_size,    // m
-                            mlp->input_dim,     // k
+                            mlp->hidden_dim,
+                            mlp->batch_size,
+                            mlp->input_dim,
                             &alpha,
-                            mlp->d_fc1_weight,  // A
-                            mlp->hidden_dim,    // lda
-                            mlp->d_X,           // B
-                            mlp->input_dim,     // ldb
+                            mlp->d_fc1_weight,
+                            mlp->input_dim,
+                            mlp->d_X,
+                            mlp->input_dim,
                             &beta,
-                            mlp->d_layer1_output, // C
-                            mlp->hidden_dim));    // ldc
+                            mlp->d_layer1_output,
+                            mlp->hidden_dim));
 
-    // Store pre-activation values
+    // Store pre-activation values for backward pass
     CHECK_CUDA(cudaMemcpy(mlp->d_pre_activation, mlp->d_layer1_output,
                          mlp->batch_size * mlp->hidden_dim * sizeof(float),
                          cudaMemcpyDeviceToDevice));
 
-    // Apply Swish activation
+    // A = Zσ(Z)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
@@ -233,41 +238,32 @@ void forward_pass_mlp(MLP* mlp, float* X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Second layer
+    // Y = AW₂
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
+                            CUBLAS_OP_T,
                             CUBLAS_OP_N,
-                            CUBLAS_OP_N,
-                            mlp->output_dim,     // n
-                            mlp->batch_size,     // m
-                            mlp->hidden_dim,     // k
+                            mlp->output_dim,
+                            mlp->batch_size,
+                            mlp->hidden_dim,
                             &alpha,
-                            mlp->d_fc2_weight,   // A
-                            mlp->output_dim,     // lda
-                            mlp->d_layer1_output,// B
-                            mlp->hidden_dim,     // ldb
+                            mlp->d_fc2_weight,
+                            mlp->hidden_dim,
+                            mlp->d_layer1_output,
+                            mlp->hidden_dim,
                             &beta,
-                            mlp->d_predictions,  // C
-                            mlp->output_dim));   // ldc
+                            mlp->d_predictions,
+                            mlp->output_dim));
 }
 
-// Custom kernel for calculating error and squared error
-__global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size) {
-        error[idx] = predictions[idx] - y[idx];
-    }
-}
-
-// Calculate loss
+// Calculate loss entirely on GPU
 float calculate_loss_mlp(MLP* mlp, float* y) {
     CHECK_CUDA(cudaMemcpy(mlp->d_y, y, mlp->batch_size * mlp->output_dim * sizeof(float),
                          cudaMemcpyHostToDevice));
 
-    // Calculate error (predictions - y)
+    // ∂L/∂Y = Y - Y_true
     int size = mlp->batch_size * mlp->output_dim;
     int block_size = 256;
     int num_blocks = (size + block_size - 1) / block_size;
-
 
     calc_error_kernel_mlp<<<num_blocks, block_size>>>(
         mlp->d_error,
@@ -276,14 +272,8 @@ float calculate_loss_mlp(MLP* mlp, float* y) {
         size
     );
 
-    // Calculate loss on CPU
-    CHECK_CUDA(cudaMemcpy(mlp->h_error, mlp->d_error, size * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-
-    float loss = 0.0f;
-    for (int i = 0; i < size; i++) {
-        loss += mlp->h_error[i] * mlp->h_error[i];
-    }
+    float loss;
+    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, size, mlp->d_error, 1, mlp->d_error, 1, &loss));
 
     return loss / size;
 }
@@ -304,39 +294,39 @@ void backward_pass_mlp(MLP* mlp, float* X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // Gradient of second layer
+    // ∂L/∂W₂ = A^T(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N,
                             CUBLAS_OP_T,
-                            mlp->output_dim,     // n
-                            mlp->hidden_dim,     // m
-                            mlp->batch_size,     // k
+                            mlp->hidden_dim,
+                            mlp->output_dim,
+                            mlp->batch_size,
                             &alpha,
-                            mlp->d_error,        // A
-                            mlp->output_dim,     // lda
-                            mlp->d_layer1_output,// B
-                            mlp->hidden_dim,     // ldb
+                            mlp->d_layer1_output,
+                            mlp->hidden_dim,
+                            mlp->d_error,
+                            mlp->output_dim,
                             &beta,
-                            mlp->d_fc2_weight_grad, // C
-                            mlp->output_dim));   // ldc
+                            mlp->d_fc2_weight_grad,
+                            mlp->hidden_dim));
 
-    // Backpropagate error through second layer
+    // ∂L/∂A = (∂L/∂Y)(W₂)^T
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T,
                             CUBLAS_OP_N,
-                            mlp->hidden_dim,     // n
-                            mlp->batch_size,     // m
-                            mlp->output_dim,     // k
+                            CUBLAS_OP_N,
+                            mlp->hidden_dim,
+                            mlp->batch_size,
+                            mlp->output_dim,
                             &alpha,
-                            mlp->d_fc2_weight,   // A
-                            mlp->output_dim,     // lda
-                            mlp->d_error,        // B
-                            mlp->output_dim,     // ldb
+                            mlp->d_fc2_weight,
+                            mlp->hidden_dim,
+                            mlp->d_error,
+                            mlp->output_dim,
                             &beta,
-                            mlp->d_error_hidden, // C
-                            mlp->hidden_dim));   // ldc
+                            mlp->d_error_hidden,
+                            mlp->hidden_dim));
 
-    // Apply Swish derivative
+    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_backward_kernel_mlp<<<num_blocks, block_size>>>(
@@ -345,21 +335,21 @@ void backward_pass_mlp(MLP* mlp, float* X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Gradient of first layer
+    // ∂L/∂W₁ = X^T(∂L/∂Z)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N,
                             CUBLAS_OP_T,
-                            mlp->hidden_dim,     // n
-                            mlp->input_dim,      // m
-                            mlp->batch_size,     // k
+                            mlp->input_dim,
+                            mlp->hidden_dim,
+                            mlp->batch_size,
                             &alpha,
-                            mlp->d_error_hidden, // A
-                            mlp->hidden_dim,     // lda
-                            mlp->d_X,            // B
-                            mlp->input_dim,      // ldb
+                            mlp->d_X,
+                            mlp->input_dim,
+                            mlp->d_error_hidden,
+                            mlp->hidden_dim,
                             &beta,
-                            mlp->d_fc1_weight_grad, // C
-                            mlp->hidden_dim));   // ldc
+                            mlp->d_fc1_weight_grad,
+                            mlp->input_dim));
 }
 
 // CUDA kernel for AdamW update
@@ -381,10 +371,13 @@ __global__ void adamw_update_kernel_mlp(
     if (idx < size) {
         float g = grad[idx] / batch_size;
         
+        // m = β₁m + (1-β₁)(∂L/∂W)
         m[idx] = beta1 * m[idx] + (1.0f - beta1) * g;
+        // v = β₂v + (1-β₂)(∂L/∂W)²
         v[idx] = beta2 * v[idx] + (1.0f - beta2) * g * g;
         
         float update = alpha_t * m[idx] / (sqrtf(v[idx]) + epsilon);
+        // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
         weight[idx] = weight[idx] * (1.0f - learning_rate * weight_decay) - update;
     }
 }
