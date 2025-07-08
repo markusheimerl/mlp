@@ -18,6 +18,13 @@ int main() {
     // Generate synthetic data
     float *X, *y;
     generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim);
+
+    // Allocate device memory for input and output and copy data
+    float *d_X, *d_y;
+    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
+    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
@@ -29,10 +36,10 @@ int main() {
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
         // Forward pass
-        forward_pass_mlp(mlp, X);
+        forward_pass_mlp(mlp, d_X);
         
         // Calculate loss
-        float loss = calculate_loss_mlp(mlp, y);
+        float loss = calculate_loss_mlp(mlp, d_y);
 
         // Print progress
         if (epoch > 0 && epoch % 100 == 0) {
@@ -44,7 +51,7 @@ int main() {
 
         // Backward pass
         zero_gradients_mlp(mlp);
-        backward_pass_mlp(mlp, X);
+        backward_pass_mlp(mlp, d_X);
         
         // Update weights
         update_weights_mlp(mlp, learning_rate);
@@ -72,7 +79,7 @@ int main() {
     float* h_predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
 
     // Forward pass with loaded model
-    forward_pass_mlp(loaded_mlp, X);
+    forward_pass_mlp(loaded_mlp, d_X);
     
     // Copy predictions from device to host
     CHECK_CUDA(cudaMemcpy(h_predictions, loaded_mlp->d_predictions, 
@@ -80,7 +87,7 @@ int main() {
                          cudaMemcpyDeviceToHost));
     
     // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss_mlp(loaded_mlp, y);
+    float verification_loss = calculate_loss_mlp(loaded_mlp, d_y);
     printf("Loss with loaded model: %.8f\n", verification_loss);
 
     printf("\nEvaluating model performance...\n");
