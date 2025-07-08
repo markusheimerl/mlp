@@ -255,7 +255,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                             mlp->output_dim));
 }
 
-// Calculate loss entirely on GPU
+// Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* y) {
     CHECK_CUDA(cudaMemcpy(mlp->d_y, y, mlp->batch_size * mlp->output_dim * sizeof(float),
                          cudaMemcpyHostToDevice));
@@ -294,7 +294,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // ∂L/∂W₂ = A^T(∂L/∂Y)
+    // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N,
                             CUBLAS_OP_T,
@@ -310,7 +310,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                             mlp->d_fc2_weight_grad,
                             mlp->hidden_dim));
 
-    // ∂L/∂A = (∂L/∂Y)(W₂)^T
+    // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N,
                             CUBLAS_OP_N,
@@ -335,7 +335,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // ∂L/∂W₁ = X^T(∂L/∂Z)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N,
                             CUBLAS_OP_T,
