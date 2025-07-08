@@ -60,8 +60,6 @@ typedef struct {
     float* d_error;          // batch_size x output_dim
     float* d_pre_activation; // batch_size x hidden_dim
     float* d_error_hidden;   // batch_size x hidden_dim
-    float* d_X;              // batch_size x input_dim
-    float* d_y;             // batch_size x output_dim
 
     // cuBLAS handle
     cublasHandle_t cublas_handle;
@@ -125,8 +123,6 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMalloc(&mlp->d_error, batch_size * output_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_pre_activation, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_error_hidden, batch_size * hidden_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_X, batch_size * input_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_y, batch_size * output_dim * sizeof(float)));
     
     // Initialize device memory
     CHECK_CUDA(cudaMemcpy(mlp->d_fc1_weight, mlp->h_fc1_weight, 
@@ -160,8 +156,6 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_error);
     cudaFree(mlp->d_pre_activation);
     cudaFree(mlp->d_error_hidden);
-    cudaFree(mlp->d_X);
-    cudaFree(mlp->d_y);
     
     // Free host memory
     free(mlp->h_fc1_weight);
@@ -201,10 +195,7 @@ __global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y
 }
 
 // Forward pass
-void forward_pass_mlp(MLP* mlp, float* X) {
-    CHECK_CUDA(cudaMemcpy(mlp->d_X, X, mlp->batch_size * mlp->input_dim * sizeof(float), 
-                         cudaMemcpyHostToDevice));
-
+void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
@@ -218,7 +209,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                             &alpha,
                             mlp->d_fc1_weight,
                             mlp->input_dim,
-                            mlp->d_X,
+                            d_X,
                             mlp->input_dim,
                             &beta,
                             mlp->d_layer1_output,
@@ -256,10 +247,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
 }
 
 // Calculate loss
-float calculate_loss_mlp(MLP* mlp, float* y) {
-    CHECK_CUDA(cudaMemcpy(mlp->d_y, y, mlp->batch_size * mlp->output_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-
+float calculate_loss_mlp(MLP* mlp, float* d_y) {
     // ∂L/∂Y = Y - Y_true
     int size = mlp->batch_size * mlp->output_dim;
     int block_size = 256;
@@ -268,7 +256,7 @@ float calculate_loss_mlp(MLP* mlp, float* y) {
     calc_error_kernel_mlp<<<num_blocks, block_size>>>(
         mlp->d_error,
         mlp->d_predictions,
-        mlp->d_y,
+        d_y,
         size
     );
 
@@ -287,10 +275,7 @@ void zero_gradients_mlp(MLP* mlp) {
 }
 
 // Backward pass
-void backward_pass_mlp(MLP* mlp, float* X) {
-    CHECK_CUDA(cudaMemcpy(mlp->d_X, X, mlp->batch_size * mlp->input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-
+void backward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
@@ -343,7 +328,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                             mlp->hidden_dim,
                             mlp->batch_size,
                             &alpha,
-                            mlp->d_X,
+                            d_X,
                             mlp->input_dim,
                             mlp->d_error_hidden,
                             mlp->hidden_dim,
