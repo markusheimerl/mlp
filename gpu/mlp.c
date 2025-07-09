@@ -76,13 +76,13 @@ int main() {
     MLP* loaded_mlp = load_mlp(model_fname, batch_size);
     
     // Allocate host memory for predictions
-    float* h_predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
+    float* predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
 
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, d_X);
     
     // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(h_predictions, loaded_mlp->d_predictions, 
+    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_predictions, 
                          num_samples * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
@@ -104,7 +104,7 @@ int main() {
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            float diff_res = y[j * output_dim + i] - h_predictions[j * output_dim + i];
+            float diff_res = y[j * output_dim + i] - predictions[j * output_dim + i];
             float diff_tot = y[j * output_dim + i] - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
@@ -121,7 +121,7 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = h_predictions[j * output_dim + i];
+            float pred = predictions[j * output_dim + i];
             float actual = y[j * output_dim + i];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
@@ -130,7 +130,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            mae += fabs(h_predictions[j * output_dim + i] - y[j * output_dim + i]);
+            mae += fabs(predictions[j * output_dim + i] - y[j * output_dim + i]);
         }
         mae /= num_samples;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
@@ -139,7 +139,7 @@ int main() {
     // Cleanup
     free(X);
     free(y);
-    free(h_predictions);
+    free(predictions);
     free_mlp(mlp);
     free_mlp(loaded_mlp);
     
