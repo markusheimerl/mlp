@@ -67,8 +67,7 @@ R² score for output y3: 0.99994481
 ```
 
 <details>
-<summary>Full logs</summary>
-```bash
+<summary>Full logs</summary><pre><code>
 markus@jetson:~/mlp$ sudo inxi -v8 -z
 System:
   Kernel: 5.15.148-tegra aarch64 bits: 64 compiler: N/A
@@ -637,6 +636,5 @@ Sample 14:         3.741           3.744          -0.003
 Mean Absolute Error for y3: 0.018
 3.06user 0.90system 0:10.28elapsed 38%CPU (0avgtext+0avgdata 224212maxresident)k
 0inputs+0outputs (883major+16049minor)pagefaults 0swaps
-markus@jetson:~/mlp/gpu$ 
-```
-</details>
+markus@jetson:~/mlp/gpu$
+</code></pre></details>
