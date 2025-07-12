@@ -80,11 +80,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     float scale2 = 1.0f / sqrt(hidden_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
-        mlp->fc1_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale1;
+        mlp->fc1_weight[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale1;
     }
     
     for (int i = 0; i < output_dim * hidden_dim; i++) {
-        mlp->fc2_weight[i] = ((float)rand() / (float)RAND_MAX * 2 - 1) * scale2;
+        mlp->fc2_weight[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale2;
     }
     
     return mlp;
