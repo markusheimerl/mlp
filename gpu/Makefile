@@ -4,23 +4,19 @@ LDFLAGS = -lm -flto
 CUDAFLAGS = --cuda-gpu-arch=sm_87 -x cuda -Wno-unknown-cuda-version
 CUDALIBS = -L/usr/local/cuda/lib64 -lcudart -lcublas
 
-# Object files
-OBJS = mlp.o train.o
-
 # Default target
-train.out: $(OBJS)
-	$(CC) $(CFLAGS) $(CUDAFLAGS) $(OBJS) $(CUDALIBS) $(LDFLAGS) -o $@
+train.out: mlp.o data.o train.o
+	$(CC) $(CFLAGS) $(CUDAFLAGS) mlp.o data.o train.o $(CUDALIBS) $(LDFLAGS) -o $@
 
 # Individual object files
 mlp.o: mlp.c mlp.h
 	$(CC) $(CFLAGS) $(CUDAFLAGS) -c mlp.c -o $@
 
+data.o: ../data.c ../data.h
+	$(CC) $(CFLAGS) -c ../data.c -o $@
+
 train.o: train.c mlp.h ../data.h
 	$(CC) $(CFLAGS) $(CUDAFLAGS) -c train.c -o $@
-
-# Keep old target for compatibility
-mlp.out: train.out
-	cp train.out mlp.out
 
 run: train.out
 	@time ./train.out
