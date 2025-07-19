@@ -6,14 +6,10 @@
 #include <string.h>
 #include <math.h>
 
-#define MAX_SYNTHETIC_OUTPUTS 4
-#define INPUT_RANGE_MIN -3.0f
-#define INPUT_RANGE_MAX 3.0f
-
 // Function prototypes
-float synth_fn(const float* x, int fx, int dim);
-void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim);
-void save_data_to_csv(float* X, float* y, int num_samples, int input_dim, int output_dim, const char* filename);
-void load_csv(const char* filename, float** X, float** y, int* num_samples, int size_x, int size_y);
+void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim, 
+                           float input_min, float input_max);
+void save_data(float* X, float* y, int num_samples, int input_dim, int output_dim, const char* filename);
+void load_data(const char* filename, float** X, float** y, int* num_samples, int input_dim, int output_dim);
 
 #endif

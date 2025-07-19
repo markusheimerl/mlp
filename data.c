@@ -1,52 +1,49 @@
 #include "data.h"
 
-float synth_fn(const float* x, int fx, int dim) {
-    switch(dim % MAX_SYNTHETIC_OUTPUTS) {
-        case 0: 
-            return sinf(x[0 % fx]*2)*cosf(x[1 % fx]*1.5f) + 
-                   powf(x[2 % fx],2)*x[3 % fx] + 
-                   expf(-powf(x[4 % fx]-x[5 % fx],2)) + 
-                   0.5f*sinf(x[6 % fx]*x[7 % fx]*(float)M_PI) +
-                   tanhf(x[8 % fx] + x[9 % fx]) +
-                   0.3f*cosf(x[10 % fx]*x[11 % fx]) +
-                   0.2f*powf(x[12 % fx], 2) +
-                   x[13 % fx]*sinf(x[14 % fx]);
-            
-        case 1: 
-            return tanhf(x[0 % fx]+x[1 % fx])*sinf(x[2 % fx]*2) + 
-                   logf(fabsf(x[3 % fx])+1)*cosf(x[4 % fx]) + 
-                   0.3f*powf(x[5 % fx]-x[6 % fx],3) +
-                   expf(-powf(x[7 % fx],2)) +
-                   sinf(x[8 % fx]*x[9 % fx]*0.5f) +
-                   0.4f*cosf(x[10 % fx] + x[11 % fx]) +
-                   powf(x[12 % fx]*x[13 % fx], 2) +
-                   0.1f*x[14 % fx];
-            
-        case 2: 
-            return expf(-powf(x[0 % fx]-0.5f,2))*sinf(x[1 % fx]*3) + 
-                   powf(cosf(x[2 % fx]),2)*x[3 % fx] + 
-                   0.2f*sinhf(x[4 % fx]*x[5 % fx]) +
-                   0.5f*tanhf(x[6 % fx] + x[7 % fx]) +
-                   powf(x[8 % fx], 3)*0.1f +
-                   cosf(x[9 % fx]*x[10 % fx]*(float)M_PI) +
-                   0.3f*expf(-powf(x[11 % fx]-x[12 % fx],2)) +
-                   0.2f*(x[13 % fx] + x[14 % fx]);
-            
-        case 3:
-            return powf(sinf(x[0 % fx]*x[1 % fx]), 2) +
-                   0.4f*tanhf(x[2 % fx] + x[3 % fx]*x[4 % fx]) +
-                   expf(-fabsf(x[5 % fx]-x[6 % fx])) +
-                   0.3f*cosf(x[7 % fx]*x[8 % fx]*2) +
-                   powf(x[9 % fx], 2)*sinf(x[10 % fx]) +
-                   0.2f*logf(fabsf(x[11 % fx]*x[12 % fx])+1) +
-                   0.1f*(x[13 % fx] - x[14 % fx]);
-            
-        default: 
-            return 0.0f;
+typedef struct {
+    int num_terms;
+    float* coefficients;
+    int* operations;
+    int* idx1;
+    int* idx2;
+    int* add_subtract;
+} SyntheticFunction;
+
+static float evaluate_function(const SyntheticFunction* func, const float* x) {
+    float result = 0.0f;
+    
+    for (int i = 0; i < func->num_terms; i++) {
+        float coefficient = func->coefficients[i];
+        int operation = func->operations[i];
+        int idx1 = func->idx1[i];
+        int idx2 = func->idx2[i];
+        int add_subtract = func->add_subtract[i];
+        
+        float term_value = 0.0f;
+        
+        switch (operation) {
+            case 0: term_value = coefficient * sinf(x[idx1] * 2.0f); break;
+            case 1: term_value = coefficient * cosf(x[idx1] * 1.5f); break;
+            case 2: term_value = coefficient * tanhf(x[idx1] + x[idx2]); break;
+            case 3: term_value = coefficient * expf(-powf(x[idx1], 2)); break;
+            case 4: term_value = coefficient * logf(fabsf(x[idx1]) + 1.0f); break;
+            case 5: term_value = coefficient * powf(x[idx1], 2) * x[idx2]; break;
+            case 6: term_value = coefficient * sinhf(x[idx1] * x[idx2]); break;
+            case 7: term_value = coefficient * x[idx1] * sinf(x[idx2] * M_PI); break;
+        }
+        
+        if (add_subtract == 0) {
+            result += term_value;
+        } else {
+            result -= term_value;
+        }
     }
+    
+    return result;
 }
 
-void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim) {
+void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim, 
+                           float input_min, float input_max) {
     // Allocate memory
     *X = (float*)malloc(num_samples * input_dim * sizeof(float));
     *y = (float*)malloc(num_samples * output_dim * sizeof(float));
@@ -54,18 +51,53 @@ void generate_synthetic_data(float** X, float** y, int num_samples, int input_di
     // Generate random input data
     for (int i = 0; i < num_samples * input_dim; i++) {
         float rand_val = (float)rand() / (float)RAND_MAX;
-        (*X)[i] = INPUT_RANGE_MIN + rand_val * (INPUT_RANGE_MAX - INPUT_RANGE_MIN);
+        (*X)[i] = input_min + rand_val * (input_max - input_min);
     }
     
-    // Generate output data using synth_fn
-    for (int i = 0; i < num_samples; i++) {
-        for (int j = 0; j < output_dim; j++) {
-            (*y)[i * output_dim + j] = synth_fn(&(*X)[i * input_dim], input_dim, j);
+    // Create the synthetic function specifications (one per output dimension)
+    SyntheticFunction* functions = (SyntheticFunction*)malloc(output_dim * sizeof(SyntheticFunction));
+    
+    for (int output_idx = 0; output_idx < output_dim; output_idx++) {
+        // Random number of terms between 6 and 12
+        int num_terms = 6 + (rand() % 7);
+        functions[output_idx].num_terms = num_terms;
+        
+        // Allocate arrays for this function's terms
+        functions[output_idx].coefficients = (float*)malloc(num_terms * sizeof(float));
+        functions[output_idx].operations = (int*)malloc(num_terms * sizeof(int));
+        functions[output_idx].idx1 = (int*)malloc(num_terms * sizeof(int));
+        functions[output_idx].idx2 = (int*)malloc(num_terms * sizeof(int));
+        functions[output_idx].add_subtract = (int*)malloc(num_terms * sizeof(int));
+
+        // Generate random terms
+        for (int term = 0; term < num_terms; term++) {
+            functions[output_idx].coefficients[term] = 0.1f + 0.4f * ((float)rand() / (float)RAND_MAX);
+            functions[output_idx].operations[term] = rand() % 8;
+            functions[output_idx].idx1[term] = rand() % input_dim;
+            functions[output_idx].idx2[term] = rand() % input_dim;
+            functions[output_idx].add_subtract[term] = rand() % 2;
         }
     }
+    
+    // Generate output data by evaluating each function
+    for (int i = 0; i < num_samples; i++) {
+        for (int j = 0; j < output_dim; j++) {
+            (*y)[i * output_dim + j] = evaluate_function(&functions[j], &(*X)[i * input_dim]);
+        }
+    }
+    
+    // Clean up
+    for (int i = 0; i < output_dim; i++) {
+        free(functions[i].coefficients);
+        free(functions[i].operations);
+        free(functions[i].idx1);
+        free(functions[i].idx2);
+        free(functions[i].add_subtract);
+    }
+    free(functions);
 }
 
-void save_data_to_csv(float* X, float* y, int num_samples, int input_dim, int output_dim, const char* filename) {
+void save_data(float* X, float* y, int num_samples, int input_dim, int output_dim, const char* filename) {
     FILE* file = fopen(filename, "w");
     if (!file) {
         printf("Error opening file for writing: %s\n", filename);
@@ -98,8 +130,7 @@ void save_data_to_csv(float* X, float* y, int num_samples, int input_dim, int ou
     printf("Data saved to %s\n", filename);
 }
 
-// Load CSV data
-void load_csv(const char* filename, float** X, float** y, int* num_samples, int size_x, int size_y) {
+void load_data(const char* filename, float** X, float** y, int* num_samples, int input_dim, int output_dim) {
     FILE* file = fopen(filename, "r");
     if (!file) {
         printf("Error opening file: %s\n", filename);
@@ -118,8 +149,8 @@ void load_csv(const char* filename, float** X, float** y, int* num_samples, int 
     *num_samples = count;
     
     // Allocate memory
-    *X = (float*)malloc(count * size_x * sizeof(float));
-    *y = (float*)malloc(count * size_y * sizeof(float));
+    *X = (float*)malloc(count * input_dim * sizeof(float));
+    *y = (float*)malloc(count * output_dim * sizeof(float));
     
     // Reset file pointer and skip header again
     fseek(file, 0, SEEK_SET);
@@ -129,12 +160,12 @@ void load_csv(const char* filename, float** X, float** y, int* num_samples, int 
     int idx = 0;
     while (fgets(buffer, sizeof(buffer), file)) {
         char* token = strtok(buffer, ",");
-        for (int i = 0; i < size_x; i++) {
-            (*X)[idx * size_x + i] = atof(token);
+        for (int i = 0; i < input_dim; i++) {
+            (*X)[idx * input_dim + i] = atof(token);
             token = strtok(NULL, ",");
         }
-        for (int i = 0; i < size_y; i++) {
-            (*y)[idx * size_y + i] = atof(token);
+        for (int i = 0; i < output_dim; i++) {
+            (*y)[idx * output_dim + i] = atof(token);
             token = strtok(NULL, ",");
         }
         idx++;

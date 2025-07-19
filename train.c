@@ -19,7 +19,7 @@ int main() {
     
     // Generate synthetic data
     float *X, *y;
-    generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim);
+    generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
@@ -62,7 +62,7 @@ int main() {
 
     // Save model and data with timestamped filenames
     save_mlp(mlp, model_fname);
-    save_data_to_csv(X, y, num_samples, input_dim, output_dim, data_fname);
+    save_data(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
