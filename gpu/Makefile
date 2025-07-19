@@ -6,7 +6,7 @@ CUDALIBS = -L/usr/local/cuda/lib64 -lcudart -lcublas
 
 # Default target
 train.out: mlp.o data.o train.o
-	$(CC) $(CFLAGS) mlp.o data.o train.o $(CUDALIBS) $(LDFLAGS) -o $@
+	$(CC) mlp.o data.o train.o $(CUDALIBS) $(LDFLAGS) -o $@
 
 # Individual object files
 mlp.o: mlp.c mlp.h
