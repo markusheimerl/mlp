@@ -2,11 +2,9 @@ CC = clang
 CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
 LDFLAGS = -lopenblas -lm -flto
 
-# Default target
 train.out: mlp.o data.o train.o
 	$(CC) mlp.o data.o train.o $(LDFLAGS) -o $@
 
-# Individual object files
 mlp.o: mlp.c mlp.h
 	$(CC) $(CFLAGS) -c mlp.c -o $@
 
@@ -18,6 +16,6 @@ train.o: train.c mlp.h data.h
 
 run: train.out
 	@time ./train.out
-	
+
 clean:
 	rm -f *.out *.o *.csv *.bin

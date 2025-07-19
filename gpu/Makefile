@@ -4,11 +4,9 @@ LDFLAGS = -lm -flto
 CUDAFLAGS = --cuda-gpu-arch=sm_87 -x cuda -Wno-unknown-cuda-version
 CUDALIBS = -L/usr/local/cuda/lib64 -lcudart -lcublas
 
-# Default target
 train.out: mlp.o data.o train.o
 	$(CC) mlp.o data.o train.o $(CUDALIBS) $(LDFLAGS) -o $@
 
-# Individual object files
 mlp.o: mlp.c mlp.h
 	$(CC) $(CFLAGS) $(CUDAFLAGS) -c mlp.c -o $@
 
