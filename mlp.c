@@ -1,132 +1,292 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <time.h>
-#include "data.h"
 #include "mlp.h"
 
-int main() {
-    srand(time(NULL));
-    openblas_set_num_threads(4);
-
-    // Parameters
-    const int input_dim = 16;
-    const int hidden_dim = 1024;
-    const int output_dim = 4;
-    const int num_samples = 1024;
-    const int batch_size = num_samples; // Full batch training
+// Initialize the network with configurable dimensions
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
+    MLP* mlp = (MLP*)malloc(sizeof(MLP));
     
-    // Generate synthetic data
-    float *X, *y;
-    generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim);
+    // Store dimensions
+    mlp->input_dim = input_dim;
+    mlp->hidden_dim = hidden_dim;
+    mlp->output_dim = output_dim;
+    mlp->batch_size = batch_size;
+    
+    // Initialize Adam parameters
+    mlp->beta1 = 0.9f;
+    mlp->beta2 = 0.999f;
+    mlp->epsilon = 1e-8f;
+    mlp->t = 0;
+    mlp->weight_decay = 0.01f;
+    
+    // Allocate and initialize weights and gradients
+    mlp->fc1_weight = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    mlp->fc2_weight = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    mlp->fc1_weight_grad = (float*)malloc(hidden_dim * input_dim * sizeof(float));
+    mlp->fc2_weight_grad = (float*)malloc(output_dim * hidden_dim * sizeof(float));
+    
+    // Allocate Adam buffers
+    mlp->fc1_m = (float*)calloc(hidden_dim * input_dim, sizeof(float));
+    mlp->fc1_v = (float*)calloc(hidden_dim * input_dim, sizeof(float));
+    mlp->fc2_m = (float*)calloc(output_dim * hidden_dim, sizeof(float));
+    mlp->fc2_v = (float*)calloc(output_dim * hidden_dim, sizeof(float));
+    
+    // Allocate helper arrays
+    mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->error = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->pre_activation = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    
+    // Initialize weights
+    float scale1 = 1.0f / sqrt(input_dim);
+    float scale2 = 1.0f / sqrt(hidden_dim);
+    
+    for (int i = 0; i < hidden_dim * input_dim; i++) {
+        mlp->fc1_weight[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale1;
+    }
+    
+    for (int i = 0; i < output_dim * hidden_dim; i++) {
+        mlp->fc2_weight[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale2;
+    }
+    
+    return mlp;
+}
+
+// Free network memory
+void free_mlp(MLP* mlp) {
+    free(mlp->fc1_weight);
+    free(mlp->fc2_weight);
+    free(mlp->fc1_weight_grad);
+    free(mlp->fc2_weight_grad);
+    free(mlp->fc1_m);
+    free(mlp->fc1_v);
+    free(mlp->fc2_m);
+    free(mlp->fc2_v);
+    free(mlp->layer1_output);
+    free(mlp->predictions);
+    free(mlp->error);
+    free(mlp->pre_activation);
+    free(mlp->error_hidden);
+    free(mlp);
+}
+
+// Forward pass
+void forward_pass_mlp(MLP* mlp, float* X) {
+    // Z = XW₁
+    cblas_sgemm(CblasRowMajor,
+                CblasNoTrans,
+                CblasNoTrans,
+                mlp->batch_size,
+                mlp->hidden_dim,
+                mlp->input_dim,
+                1.0f,
+                X,
+                mlp->input_dim,
+                mlp->fc1_weight,
+                mlp->hidden_dim,
+                0.0f,
+                mlp->layer1_output,
+                mlp->hidden_dim);
+    
+    // Store Z for backward pass
+    memcpy(mlp->pre_activation, mlp->layer1_output, 
+           mlp->batch_size * mlp->hidden_dim * sizeof(float));
+    
+    // A = Zσ(Z)
+    for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
+        mlp->layer1_output[i] = mlp->layer1_output[i] / (1.0f + expf(-mlp->layer1_output[i]));
+    }
+    
+    // Y = AW₂
+    cblas_sgemm(CblasRowMajor,
+                CblasNoTrans,
+                CblasNoTrans,
+                mlp->batch_size,
+                mlp->output_dim,
+                mlp->hidden_dim,
+                1.0f,
+                mlp->layer1_output,
+                mlp->hidden_dim,
+                mlp->fc2_weight,
+                mlp->output_dim,
+                0.0f,
+                mlp->predictions,
+                mlp->output_dim);
+}
+
+// Calculate loss
+float calculate_loss_mlp(MLP* mlp, float* y) {
+    // ∂L/∂Y = Y - Y_true
+    float loss = 0.0f;
+    for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
+        mlp->error[i] = mlp->predictions[i] - y[i];
+        loss += mlp->error[i] * mlp->error[i];
+    }
+    return loss / (mlp->batch_size * mlp->output_dim);
+}
+
+// Zero gradients
+void zero_gradients_mlp(MLP* mlp) {
+    memset(mlp->fc1_weight_grad, 0, mlp->hidden_dim * mlp->input_dim * sizeof(float));
+    memset(mlp->fc2_weight_grad, 0, mlp->output_dim * mlp->hidden_dim * sizeof(float));
+}
+
+// Backward pass
+void backward_pass_mlp(MLP* mlp, float* X) {
+    // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
+    cblas_sgemm(CblasRowMajor,
+                CblasTrans,
+                CblasNoTrans,
+                mlp->hidden_dim,
+                mlp->output_dim,
+                mlp->batch_size,
+                1.0f,
+                mlp->layer1_output,
+                mlp->hidden_dim,
+                mlp->error,
+                mlp->output_dim,
+                0.0f,
+                mlp->fc2_weight_grad,
+                mlp->output_dim);
+    
+    // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
+    cblas_sgemm(CblasRowMajor,
+                CblasNoTrans,
+                CblasTrans,
+                mlp->batch_size,
+                mlp->hidden_dim,
+                mlp->output_dim,
+                1.0f,
+                mlp->error,
+                mlp->output_dim,
+                mlp->fc2_weight,
+                mlp->output_dim,
+                0.0f,
+                mlp->error_hidden,
+                mlp->hidden_dim);
+    
+    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
+    for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
+        float sigmoid = 1.0f / (1.0f + expf(-mlp->pre_activation[i]));
+        mlp->error_hidden[i] *= sigmoid + mlp->pre_activation[i] * sigmoid * (1.0f - sigmoid);
+    }
+    
+    // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
+    cblas_sgemm(CblasRowMajor,
+                CblasTrans,
+                CblasNoTrans,
+                mlp->input_dim,
+                mlp->hidden_dim,
+                mlp->batch_size,
+                1.0f,
+                X,
+                mlp->input_dim,
+                mlp->error_hidden,
+                mlp->hidden_dim,
+                0.0f,
+                mlp->fc1_weight_grad,
+                mlp->hidden_dim);
+}
+
+// Update weights using AdamW
+void update_weights_mlp(MLP* mlp, float learning_rate) {
+    mlp->t++;  // Increment time step
+    
+    float beta1_t = powf(mlp->beta1, mlp->t);
+    float beta2_t = powf(mlp->beta2, mlp->t);
+    float alpha_t = learning_rate * sqrtf(1.0f - beta2_t) / (1.0f - beta1_t);
+    
+    // Update fc1 weights
+    for (int i = 0; i < mlp->hidden_dim * mlp->input_dim; i++) {
+        float grad = mlp->fc1_weight_grad[i] / mlp->batch_size;
+        
+        // m = β₁m + (1-β₁)(∂L/∂W)
+        mlp->fc1_m[i] = mlp->beta1 * mlp->fc1_m[i] + (1.0f - mlp->beta1) * grad;
+        // v = β₂v + (1-β₂)(∂L/∂W)²
+        mlp->fc1_v[i] = mlp->beta2 * mlp->fc1_v[i] + (1.0f - mlp->beta2) * grad * grad;
+        
+        float update = alpha_t * mlp->fc1_m[i] / (sqrtf(mlp->fc1_v[i]) + mlp->epsilon);
+        // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
+        mlp->fc1_weight[i] = mlp->fc1_weight[i] * (1.0f - learning_rate * mlp->weight_decay) - update;
+    }
+    
+    // Update fc2 weights
+    for (int i = 0; i < mlp->output_dim * mlp->hidden_dim; i++) {
+        float grad = mlp->fc2_weight_grad[i] / mlp->batch_size;
+        
+        // m = β₁m + (1-β₁)(∂L/∂W)
+        mlp->fc2_m[i] = mlp->beta1 * mlp->fc2_m[i] + (1.0f - mlp->beta1) * grad;
+        // v = β₂v + (1-β₂)(∂L/∂W)²
+        mlp->fc2_v[i] = mlp->beta2 * mlp->fc2_v[i] + (1.0f - mlp->beta2) * grad * grad;
+        
+        float update = alpha_t * mlp->fc2_m[i] / (sqrtf(mlp->fc2_v[i]) + mlp->epsilon);
+        // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
+        mlp->fc2_weight[i] = mlp->fc2_weight[i] * (1.0f - learning_rate * mlp->weight_decay) - update;
+    }
+}
+
+// Function to save model weights to binary file
+void save_mlp(MLP* mlp, const char* filename) {
+    FILE* file = fopen(filename, "wb");
+    if (!file) {
+        printf("Error opening file for writing: %s\n", filename);
+        return;
+    }
+    
+    // Save dimensions
+    fwrite(&mlp->input_dim, sizeof(int), 1, file);
+    fwrite(&mlp->hidden_dim, sizeof(int), 1, file);
+    fwrite(&mlp->output_dim, sizeof(int), 1, file);
+    fwrite(&mlp->batch_size, sizeof(int), 1, file);
+    
+    // Save weights
+    fwrite(mlp->fc1_weight, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc2_weight, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+    
+    // Save Adam state
+    fwrite(&mlp->t, sizeof(int), 1, file);
+    fwrite(mlp->fc1_m, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc1_v, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
+    fwrite(mlp->fc2_m, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+    fwrite(mlp->fc2_v, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
+
+    fclose(file);
+    printf("Model saved to %s\n", filename);
+}
+
+// Function to load model weights from binary file
+MLP* load_mlp(const char* filename, int custom_batch_size) {
+    FILE* file = fopen(filename, "rb");
+    if (!file) {
+        printf("Error opening file for reading: %s\n", filename);
+        return NULL;
+    }
+    
+    // Read dimensions
+    int input_dim, hidden_dim, output_dim, stored_batch_size;
+    fread(&input_dim, sizeof(int), 1, file);
+    fread(&hidden_dim, sizeof(int), 1, file);
+    fread(&output_dim, sizeof(int), 1, file);
+    fread(&stored_batch_size, sizeof(int), 1, file);
+    
+    // Use custom_batch_size if provided, otherwise use stored value
+    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
-    // Training parameters
-    const int num_epochs = 10000;
-    const float learning_rate = 0.001f;
+    // Load weights
+    fread(mlp->fc1_weight, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc2_weight, sizeof(float), output_dim * hidden_dim, file);
     
-    // Training loop
-    for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
-        // Forward pass
-        forward_pass_mlp(mlp, X);
-        
-        // Calculate loss
-        float loss = calculate_loss_mlp(mlp, y);
+    // Load Adam state
+    fread(&mlp->t, sizeof(int), 1, file);
+    fread(mlp->fc1_m, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc1_v, sizeof(float), hidden_dim * input_dim, file);
+    fread(mlp->fc2_m, sizeof(float), output_dim * hidden_dim, file);
+    fread(mlp->fc2_v, sizeof(float), output_dim * hidden_dim, file);
 
-        // Print progress
-        if (epoch > 0 && epoch % 100 == 0) {
-            printf("Epoch [%d/%d], Loss: %.8f\n", epoch, num_epochs, loss);
-        }
-
-        // Don't update weights after final evaluation
-        if (epoch == num_epochs) break;
-
-        // Backward pass
-        zero_gradients_mlp(mlp);
-        backward_pass_mlp(mlp, X);
-        
-        // Update weights
-        update_weights_mlp(mlp, learning_rate);
-    }
-
-    // Get timestamp for filenames
-    char model_fname[64], data_fname[64];
-    time_t now = time(NULL);
-    strftime(model_fname, sizeof(model_fname), "%Y%m%d_%H%M%S_model.bin", 
-             localtime(&now));
-    strftime(data_fname, sizeof(data_fname), "%Y%m%d_%H%M%S_data.csv", 
-             localtime(&now));
-
-    // Save model and data with timestamped filenames
-    save_mlp(mlp, model_fname);
-    save_data_to_csv(X, y, num_samples, input_dim, output_dim, data_fname);
+    fclose(file);
+    printf("Model loaded from %s\n", filename);
     
-    // Load the model back and verify
-    printf("\nVerifying saved model...\n");
-
-    // Load the model back with original batch_size
-    MLP* loaded_mlp = load_mlp(model_fname, batch_size);
-    
-    // Forward pass with loaded model
-    forward_pass_mlp(loaded_mlp, X);
-    
-    // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss_mlp(loaded_mlp, y);
-    printf("Loss with loaded model: %.8f\n", verification_loss);
-
-    printf("\nEvaluating model performance...\n");
-
-    // Calculate R² scores
-    printf("\nR² scores:\n");
-    for (int i = 0; i < output_dim; i++) {
-        float y_mean = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
-            y_mean += y[j * output_dim + i];
-        }
-        y_mean /= num_samples;
-
-        float ss_res = 0.0f;
-        float ss_tot = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
-            float diff_res = y[j * output_dim + i] - loaded_mlp->predictions[j * output_dim + i];
-            float diff_tot = y[j * output_dim + i] - y_mean;
-            ss_res += diff_res * diff_res;
-            ss_tot += diff_tot * diff_tot;
-        }
-        float r2 = 1.0f - (ss_res / ss_tot);
-        printf("R² score for output y%d: %.8f\n", i, r2);
-    }
-
-    // Print sample predictions
-    printf("\nSample Predictions (first 15 samples):\n");
-    printf("Output\t\tPredicted\tActual\t\tDifference\n");
-    printf("------------------------------------------------------------\n");
-
-    for (int i = 0; i < output_dim; i++) {
-        printf("\ny%d:\n", i);
-        for (int j = 0; j < 15; j++) {
-            float pred = loaded_mlp->predictions[j * output_dim + i];
-            float actual = y[j * output_dim + i];
-            float diff = pred - actual;
-            printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
-        }
-        
-        // Calculate MAE for this output
-        float mae = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
-            mae += fabs(loaded_mlp->predictions[j * output_dim + i] - y[j * output_dim + i]);
-        }
-        mae /= num_samples;
-        printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
-    }
-    
-    // Cleanup
-    free(X);
-    free(y);
-    free_mlp(mlp);
-    free_mlp(loaded_mlp);
-    
-    return 0;
+    return mlp;
 }
