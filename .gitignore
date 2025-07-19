@@ -1,3 +1,10 @@
 *.out
 *.csv
 *.bin
+
+# Object files
+*.o
+
+# Executables
+train
+mlp
