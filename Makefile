@@ -1,10 +1,10 @@
 CC = clang
 CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -static -lopenblas -lm -flto
+LDFLAGS = -lopenblas -lm -flto
 
 # Default target
 train.out: mlp.o data.o train.o
-	$(CC) $(CFLAGS) mlp.o data.o train.o $(LDFLAGS) -o $@
+	$(CC) mlp.o data.o train.o $(LDFLAGS) -o $@
 
 # Individual object files
 mlp.o: mlp.c mlp.h
