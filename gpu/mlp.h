@@ -67,7 +67,7 @@ typedef struct {
     int batch_size;
 } MLP;
 
-// CUDA kernels
+// CUDA kernel prototypes
 __global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
 __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
 __global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size);
