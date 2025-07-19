@@ -482,5 +482,3 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     
     return mlp;
 }
-
-#endif
