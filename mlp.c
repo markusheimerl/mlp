@@ -144,7 +144,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->hidden_dim,
                 mlp->error,
                 mlp->output_dim,
-                0.0f,
+                1.0f,
                 mlp->fc2_weight_grad,
                 mlp->output_dim);
     
@@ -182,7 +182,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->input_dim,
                 mlp->error_hidden,
                 mlp->hidden_dim,
-                0.0f,
+                1.0f,
                 mlp->fc1_weight_grad,
                 mlp->hidden_dim);
 }

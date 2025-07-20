@@ -206,6 +206,7 @@ void zero_gradients_mlp(MLP* mlp) {
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
+    const float beta_acc = 1.0f;
     const float beta = 0.0f;
 
     // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
@@ -220,7 +221,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->hidden_dim,
                             mlp->d_error,
                             mlp->output_dim,
-                            &beta,
+                            &beta_acc,
                             mlp->d_fc2_weight_grad,
                             mlp->hidden_dim));
 
@@ -261,7 +262,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->input_dim,
                             mlp->d_error_hidden,
                             mlp->hidden_dim,
-                            &beta,
+                            &beta_acc,
                             mlp->d_fc1_weight_grad,
                             mlp->input_dim));
 }
