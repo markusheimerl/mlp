@@ -34,6 +34,45 @@ static float evaluate_synthetic_function(int num_terms, const float* coefficient
     return result;
 }
 
+static void print_symbolic_function(int output_idx, int num_terms, const float* coefficients, 
+                                  const int* operations, const int* idx1, const int* idx2, 
+                                  const int* add_subtract) {
+    printf("y%d = ", output_idx);
+    
+    for (int i = 0; i < num_terms; i++) {
+        float coeff = coefficients[i];
+        int op = operations[i];
+        int in1 = idx1[i];
+        int in2 = idx2[i];
+        int add_sub = add_subtract[i];
+        
+        // Print sign
+        if (i == 0) {
+            if (add_sub == 1) printf("-");
+        } else {
+            printf(" %s ", (add_sub == 0) ? "+" : "-");
+        }
+        
+        // Print coefficient if not 1.0
+        if (fabsf(coeff - 1.0f) > 1e-6) {
+            printf("%.3f*", coeff);
+        }
+        
+        // Print operation
+        switch (op) {
+            case 0: printf("sin(2*x%d)", in1); break;
+            case 1: printf("cos(1.5*x%d)", in1); break;
+            case 2: printf("tanh(x%d + x%d)", in1, in2); break;
+            case 3: printf("exp(-x%d^2)", in1); break;
+            case 4: printf("log(|x%d| + 1)", in1); break;
+            case 5: printf("x%d^2*x%d", in1, in2); break;
+            case 6: printf("sinh(x%d*x%d)", in1, in2); break;
+            case 7: printf("x%d*sin(π*x%d)", in1, in2); break;
+        }
+    }
+    printf("\n");
+}
+
 void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim, 
                            float input_min, float input_max) {
     // Allocate memory
@@ -74,6 +113,14 @@ void generate_synthetic_data(float** X, float** y, int num_samples, int input_di
             idx2[output_idx][term] = rand() % input_dim;
             add_subtract[output_idx][term] = rand() % 2;
         }
+    }
+    
+    // Print symbolic representation of generated functions
+    printf("\nGenerated synthetic functions:\n");
+    for (int output_idx = 0; output_idx < output_dim; output_idx++) {
+        print_symbolic_function(output_idx, num_terms_per_output[output_idx], 
+                              coefficients[output_idx], operations[output_idx], 
+                              idx1[output_idx], idx2[output_idx], add_subtract[output_idx]);
     }
     
     // Generate output data by evaluating each function
