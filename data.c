@@ -122,6 +122,7 @@ void generate_synthetic_data(float** X, float** y, int num_samples, int input_di
                               coefficients[output_idx], operations[output_idx], 
                               idx1[output_idx], idx2[output_idx], add_subtract[output_idx]);
     }
+    printf("\n");
     
     // Generate output data by evaluating each function
     for (int i = 0; i < num_samples; i++) {
