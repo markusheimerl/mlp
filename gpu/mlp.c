@@ -130,19 +130,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
 
     // Z = XW₁
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T,
-                            CUBLAS_OP_N,
-                            mlp->hidden_dim,
-                            mlp->batch_size,
-                            mlp->input_dim,
-                            &alpha,
-                            mlp->d_fc1_weight,
-                            mlp->input_dim,
-                            d_X,
-                            mlp->input_dim,
-                            &beta,
-                            mlp->d_layer1_output,
-                            mlp->hidden_dim));
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
+                            &alpha, mlp->d_fc1_weight, mlp->input_dim,
+                            d_X, mlp->input_dim,
+                            &beta, mlp->d_layer1_output, mlp->hidden_dim));
 
     // Store pre-activation values for backward pass
     CHECK_CUDA(cudaMemcpy(mlp->d_pre_activation, mlp->d_layer1_output,
@@ -160,19 +152,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
 
     // Y = AW₂
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T,
-                            CUBLAS_OP_N,
-                            mlp->output_dim,
-                            mlp->batch_size,
-                            mlp->hidden_dim,
-                            &alpha,
-                            mlp->d_fc2_weight,
-                            mlp->hidden_dim,
-                            mlp->d_layer1_output,
-                            mlp->hidden_dim,
-                            &beta,
-                            mlp->d_predictions,
-                            mlp->output_dim));
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
+                            &alpha, mlp->d_fc2_weight, mlp->hidden_dim,
+                            mlp->d_layer1_output, mlp->hidden_dim,
+                            &beta, mlp->d_predictions, mlp->output_dim));
 }
 
 // Calculate loss
@@ -211,35 +195,19 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
 
     // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N,
-                            CUBLAS_OP_T,
-                            mlp->hidden_dim,
-                            mlp->output_dim,
-                            mlp->batch_size,
-                            &alpha,
-                            mlp->d_layer1_output,
-                            mlp->hidden_dim,
-                            mlp->d_error,
-                            mlp->output_dim,
-                            &beta_acc,
-                            mlp->d_fc2_weight_grad,
-                            mlp->hidden_dim));
+                            CUBLAS_OP_N, CUBLAS_OP_T,
+                            mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
+                            &alpha, mlp->d_layer1_output, mlp->hidden_dim,
+                            mlp->d_error, mlp->output_dim,
+                            &beta_acc, mlp->d_fc2_weight_grad, mlp->hidden_dim));
 
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N,
-                            CUBLAS_OP_N,
-                            mlp->hidden_dim,
-                            mlp->batch_size,
-                            mlp->output_dim,
-                            &alpha,
-                            mlp->d_fc2_weight,
-                            mlp->hidden_dim,
-                            mlp->d_error,
-                            mlp->output_dim,
-                            &beta,
-                            mlp->d_error_hidden,
-                            mlp->hidden_dim));
+                            CUBLAS_OP_N, CUBLAS_OP_N,
+                            mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
+                            &alpha, mlp->d_fc2_weight, mlp->hidden_dim,
+                            mlp->d_error, mlp->output_dim,
+                            &beta, mlp->d_error_hidden, mlp->hidden_dim));
 
     // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
     int block_size = 256;
@@ -252,36 +220,17 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
 
     // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N,
-                            CUBLAS_OP_T,
-                            mlp->input_dim,
-                            mlp->hidden_dim,
-                            mlp->batch_size,
-                            &alpha,
-                            d_X,
-                            mlp->input_dim,
-                            mlp->d_error_hidden,
-                            mlp->hidden_dim,
-                            &beta_acc,
-                            mlp->d_fc1_weight_grad,
-                            mlp->input_dim));
+                            CUBLAS_OP_N, CUBLAS_OP_T,
+                            mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
+                            &alpha, d_X, mlp->input_dim,
+                            mlp->d_error_hidden, mlp->hidden_dim,
+                            &beta_acc, mlp->d_fc1_weight_grad, mlp->input_dim));
 }
 
 // CUDA kernel for AdamW update
-__global__ void adamw_update_kernel_mlp(
-    float* weight,
-    float* grad,
-    float* m,
-    float* v,
-    float beta1,
-    float beta2,
-    float epsilon,
-    float learning_rate,
-    float weight_decay,
-    float alpha_t,
-    int size,
-    int batch_size
-) {
+__global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v,
+                                        float beta1, float beta2, float epsilon, float learning_rate,
+                                        float weight_decay, float alpha_t, int size, int batch_size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
         float g = grad[idx] / batch_size;
