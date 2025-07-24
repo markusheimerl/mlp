@@ -72,20 +72,11 @@ void free_mlp(MLP* mlp) {
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
     // Z = XW₁
-    cblas_sgemm(CblasRowMajor,
-                CblasNoTrans,
-                CblasNoTrans,
-                mlp->batch_size,
-                mlp->hidden_dim,
-                mlp->input_dim,
-                1.0f,
-                X,
-                mlp->input_dim,
-                mlp->fc1_weight,
-                mlp->hidden_dim,
-                0.0f,
-                mlp->layer1_output,
-                mlp->hidden_dim);
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
+                1.0f, X, mlp->input_dim,
+                mlp->fc1_weight, mlp->hidden_dim,
+                0.0f, mlp->layer1_output, mlp->hidden_dim);
     
     // Store Z for backward pass
     memcpy(mlp->pre_activation, mlp->layer1_output, 
@@ -97,20 +88,11 @@ void forward_pass_mlp(MLP* mlp, float* X) {
     }
     
     // Y = AW₂
-    cblas_sgemm(CblasRowMajor,
-                CblasNoTrans,
-                CblasNoTrans,
-                mlp->batch_size,
-                mlp->output_dim,
-                mlp->hidden_dim,
-                1.0f,
-                mlp->layer1_output,
-                mlp->hidden_dim,
-                mlp->fc2_weight,
-                mlp->output_dim,
-                0.0f,
-                mlp->predictions,
-                mlp->output_dim);
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
+                1.0f, mlp->layer1_output, mlp->hidden_dim,
+                mlp->fc2_weight, mlp->output_dim,
+                0.0f, mlp->predictions, mlp->output_dim);
 }
 
 // Calculate loss
@@ -133,36 +115,18 @@ void zero_gradients_mlp(MLP* mlp) {
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X) {
     // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
-    cblas_sgemm(CblasRowMajor,
-                CblasTrans,
-                CblasNoTrans,
-                mlp->hidden_dim,
-                mlp->output_dim,
-                mlp->batch_size,
-                1.0f,
-                mlp->layer1_output,
-                mlp->hidden_dim,
-                mlp->error,
-                mlp->output_dim,
-                1.0f,
-                mlp->fc2_weight_grad,
-                mlp->output_dim);
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
+                1.0f, mlp->layer1_output, mlp->hidden_dim,
+                mlp->error, mlp->output_dim,
+                1.0f, mlp->fc2_weight_grad, mlp->output_dim);
     
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
-    cblas_sgemm(CblasRowMajor,
-                CblasNoTrans,
-                CblasTrans,
-                mlp->batch_size,
-                mlp->hidden_dim,
-                mlp->output_dim,
-                1.0f,
-                mlp->error,
-                mlp->output_dim,
-                mlp->fc2_weight,
-                mlp->output_dim,
-                0.0f,
-                mlp->error_hidden,
-                mlp->hidden_dim);
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
+                1.0f, mlp->error, mlp->output_dim,
+                mlp->fc2_weight, mlp->output_dim,
+                0.0f, mlp->error_hidden, mlp->hidden_dim);
     
     // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
@@ -171,20 +135,11 @@ void backward_pass_mlp(MLP* mlp, float* X) {
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
-    cblas_sgemm(CblasRowMajor,
-                CblasTrans,
-                CblasNoTrans,
-                mlp->input_dim,
-                mlp->hidden_dim,
-                mlp->batch_size,
-                1.0f,
-                X,
-                mlp->input_dim,
-                mlp->error_hidden,
-                mlp->hidden_dim,
-                1.0f,
-                mlp->fc1_weight_grad,
-                mlp->hidden_dim);
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
+                1.0f, X, mlp->input_dim,
+                mlp->error_hidden, mlp->hidden_dim,
+                1.0f, mlp->fc1_weight_grad, mlp->hidden_dim);
 }
 
 // Update weights using AdamW
