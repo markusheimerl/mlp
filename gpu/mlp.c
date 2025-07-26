@@ -25,15 +25,15 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     float* W2 = (float*)malloc(output_dim * hidden_dim * sizeof(float));
     
     // Initialize weights on host
-    float scale1 = 1.0f / sqrt(input_dim);
-    float scale2 = 1.0f / sqrt(hidden_dim);
+    float scale_W1 = 1.0f / sqrt(input_dim);
+    float scale_W2 = 1.0f / sqrt(hidden_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
-        W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale1;
+        W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W1;
     }
     
     for (int i = 0; i < output_dim * hidden_dim; i++) {
-        W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale2;
+        W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W2;
     }
     
     // Allocate device memory
@@ -76,19 +76,12 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
 // Free network memory
 void free_mlp(MLP* mlp) {
     // Free device memory
-    cudaFree(mlp->d_W1);
-    cudaFree(mlp->d_W2);
-    cudaFree(mlp->d_W1_grad);
-    cudaFree(mlp->d_W2_grad);
-    cudaFree(mlp->d_W1_m);
-    cudaFree(mlp->d_W1_v);
-    cudaFree(mlp->d_W2_m);
-    cudaFree(mlp->d_W2_v);
-    cudaFree(mlp->d_layer1_output);
-    cudaFree(mlp->d_predictions);
-    cudaFree(mlp->d_error);
-    cudaFree(mlp->d_pre_activation);
-    cudaFree(mlp->d_error_hidden);
+    cudaFree(mlp->d_W1); cudaFree(mlp->d_W2);
+    cudaFree(mlp->d_W1_grad); cudaFree(mlp->d_W2_grad);
+    cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
+    cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
+    cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_predictions); cudaFree(mlp->d_error);
+    cudaFree(mlp->d_pre_activation); cudaFree(mlp->d_error_hidden);
     
     // Destroy cuBLAS handle
     cublasDestroy(mlp->cublas_handle);
@@ -260,36 +253,18 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     int W1_size = mlp->hidden_dim * mlp->input_dim;
     int W1_blocks = (W1_size + block_size - 1) / block_size;
     adamw_update_kernel_mlp<<<W1_blocks, block_size>>>(
-        mlp->d_W1,
-        mlp->d_W1_grad,
-        mlp->d_W1_m,
-        mlp->d_W1_v,
-        mlp->beta1,
-        mlp->beta2,
-        mlp->epsilon,
-        learning_rate,
-        mlp->weight_decay,
-        alpha_t,
-        W1_size,
-        mlp->batch_size
+        mlp->d_W1, mlp->d_W1_grad, mlp->d_W1_m, mlp->d_W1_v,
+        mlp->beta1, mlp->beta2, mlp->epsilon, learning_rate, mlp->weight_decay,
+        alpha_t, W1_size, mlp->batch_size
     );
     
     // Update W2 weights
     int W2_size = mlp->output_dim * mlp->hidden_dim;
     int W2_blocks = (W2_size + block_size - 1) / block_size;
     adamw_update_kernel_mlp<<<W2_blocks, block_size>>>(
-        mlp->d_W2,
-        mlp->d_W2_grad,
-        mlp->d_W2_m,
-        mlp->d_W2_v,
-        mlp->beta1,
-        mlp->beta2,
-        mlp->epsilon,
-        learning_rate,
-        mlp->weight_decay,
-        alpha_t,
-        W2_size,
-        mlp->batch_size
+        mlp->d_W2, mlp->d_W2_grad, mlp->d_W2_m, mlp->d_W2_v,
+        mlp->beta1, mlp->beta2, mlp->epsilon, learning_rate, mlp->weight_decay,
+        alpha_t, W2_size, mlp->batch_size
     );
 }
 

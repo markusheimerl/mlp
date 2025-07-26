@@ -37,15 +37,15 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     
     // Initialize weights
-    float scale1 = 1.0f / sqrt(input_dim);
-    float scale2 = 1.0f / sqrt(hidden_dim);
+    float scale_W1 = 1.0f / sqrt(input_dim);
+    float scale_W2 = 1.0f / sqrt(hidden_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
-        mlp->W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale1;
+        mlp->W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W1;
     }
     
     for (int i = 0; i < output_dim * hidden_dim; i++) {
-        mlp->W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale2;
+        mlp->W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W2;
     }
     
     return mlp;
@@ -53,19 +53,12 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
 
 // Free network memory
 void free_mlp(MLP* mlp) {
-    free(mlp->W1);
-    free(mlp->W2);
-    free(mlp->W1_grad);
-    free(mlp->W2_grad);
-    free(mlp->W1_m);
-    free(mlp->W1_v);
-    free(mlp->W2_m);
-    free(mlp->W2_v);
-    free(mlp->layer1_output);
-    free(mlp->predictions);
-    free(mlp->error);
-    free(mlp->pre_activation);
-    free(mlp->error_hidden);
+    free(mlp->W1); free(mlp->W2);
+    free(mlp->W1_grad); free(mlp->W2_grad);
+    free(mlp->W1_m); free(mlp->W1_v);
+    free(mlp->W2_m); free(mlp->W2_v);
+    free(mlp->layer1_output); free(mlp->predictions); free(mlp->error);
+    free(mlp->pre_activation); free(mlp->error_hidden);
     free(mlp);
 }
 
