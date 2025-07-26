@@ -11,7 +11,7 @@ Y &= AW_2 + XR
 \end{align*}
 $$
 
-The residual connection $XR$ allows the input to directly contribute linearily to the output, providing a skip connection that can help with gradient flow.
+The residual connection $XR$ allows the input to linearily contribute to the output which can help with gradient flow.
 
 The swish activation $x\sigma(x)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 
