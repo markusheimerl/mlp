@@ -7,11 +7,11 @@ $$
 \begin{align*}
 Z &= XW_1 \\
 A &= Z\sigma(Z) \\
-Y &= AW_2 + XR^T
+Y &= AW_2 + XR
 \end{align*}
 $$
 
-The residual connection $XR^T$ allows the input to directly contribute to the output, providing a skip connection that can help with gradient flow and enable more flexible modeling of input-output relationships across different dimensionalities.
+The residual connection $XR$ allows the input to directly contribute to the output, providing a skip connection that can help with gradient flow and enable more flexible modeling of input-output relationships across different dimensionalities.
 
 The swish activation $x\sigma(x)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 

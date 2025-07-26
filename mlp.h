@@ -11,10 +11,10 @@ typedef struct {
     // Weights and gradients
     float* W1;     // hidden_dim x input_dim
     float* W2;     // output_dim x hidden_dim
-    float* R;      // output_dim x input_dim (residual connection)
+    float* R;      // input_dim x output_dim (residual connection)
     float* W1_grad; // hidden_dim x input_dim
     float* W2_grad; // output_dim x hidden_dim
-    float* R_grad;  // output_dim x input_dim
+    float* R_grad;  // input_dim x output_dim
     
     // Adam parameters
     float* W1_m;  // First moment for W1
