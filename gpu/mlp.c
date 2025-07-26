@@ -222,12 +222,12 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_error, mlp->output_dim,
                             &beta_acc, mlp->d_W2_grad, mlp->hidden_dim));
 
-    // ∂L/∂R = Xᵀ(∂L/∂Y)
+    // ∂L/∂R = (∂L/∂Y)ᵀ * X = (X^T * (∂L/∂Y))^T  
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_T,
-                            mlp->input_dim, mlp->output_dim, mlp->batch_size,
-                            &alpha, d_X, mlp->input_dim,
-                            mlp->d_error, mlp->output_dim,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->output_dim, mlp->input_dim, mlp->batch_size,
+                            &alpha, mlp->d_error, mlp->output_dim,
+                            d_X, mlp->input_dim,
                             &beta_acc, mlp->d_R_grad, mlp->input_dim));
 
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
