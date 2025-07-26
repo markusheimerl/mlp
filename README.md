@@ -1,15 +1,17 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a standard feed-forward network operating on batched inputs of shape (batch_size × input_dim). The architecture consists of two linear transformations with an intermediate swish activation, where the forward propagation follows:
+Consider a standard feed-forward network operating on batched inputs of shape (batch_size × input_dim). The architecture consists of two linear transformations with an intermediate swish activation and a residual connection, where the forward propagation follows:
 
 $$
 \begin{align*}
 Z &= XW_1 \\
 A &= Z\sigma(Z) \\
-Y &= AW_2
+Y &= AW_2 + XR^T
 \end{align*}
 $$
+
+The residual connection $XR^T$ allows the input to directly contribute to the output, providing a skip connection that can help with gradient flow and enable more flexible modeling of input-output relationships across different dimensionalities.
 
 The swish activation $x\sigma(x)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 
@@ -17,13 +19,14 @@ $$
 \begin{align*}
 \frac{\partial L}{\partial Y} &= Y - Y_{\text{true}} \\
 \frac{\partial L}{\partial W_2} &= A^\top(\frac{\partial L}{\partial Y}) \\
+\frac{\partial L}{\partial R} &= X^\top(\frac{\partial L}{\partial Y}) \\
 \frac{\partial L}{\partial A} &= (\frac{\partial L}{\partial Y})(W_2)^\top \\
 \frac{\partial L}{\partial Z} &= \frac{\partial L}{\partial A} \odot [\sigma(Z) + Z\sigma(Z)(1-\sigma(Z))] \\
 \frac{\partial L}{\partial W_1} &= X^\top(\frac{\partial L}{\partial Z})
 \end{align*}
 $$
 
-The AdamW optimizer maintains exponential moving averages of gradients and their squares through $\beta_1$ and $\beta_2$, while simultaneously applying L2 regularization through weight decay $\lambda$. The learning rate is denoted by $\eta$, $t$ is the current training iteration, and $\epsilon$ is a small constant for numerical stability. For each weight matrix $W$, the update rule is:
+The AdamW optimizer maintains exponential moving averages of gradients and their squares through $\beta_1$ and $\beta_2$, while simultaneously applying L2 regularization through weight decay $\lambda$. The learning rate is denoted by $\eta$, $t$ is the current training iteration, and $\epsilon$ is a small constant for numerical stability. For each weight matrix $W$ (including $W_1$, $W_2$, and $R$), the update rule is:
 
 $$
 \begin{align*}
