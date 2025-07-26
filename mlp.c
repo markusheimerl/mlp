@@ -20,18 +20,18 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     // Allocate and initialize weights and gradients
     mlp->W1 = (float*)malloc(hidden_dim * input_dim * sizeof(float));
     mlp->W2 = (float*)malloc(output_dim * hidden_dim * sizeof(float));
-    mlp->R = (float*)malloc(output_dim * input_dim * sizeof(float));
+    mlp->R = (float*)malloc(input_dim * output_dim * sizeof(float));
     mlp->W1_grad = (float*)malloc(hidden_dim * input_dim * sizeof(float));
     mlp->W2_grad = (float*)malloc(output_dim * hidden_dim * sizeof(float));
-    mlp->R_grad = (float*)malloc(output_dim * input_dim * sizeof(float));
+    mlp->R_grad = (float*)malloc(input_dim * output_dim * sizeof(float));
     
     // Allocate Adam buffers
     mlp->W1_m = (float*)calloc(hidden_dim * input_dim, sizeof(float));
     mlp->W1_v = (float*)calloc(hidden_dim * input_dim, sizeof(float));
     mlp->W2_m = (float*)calloc(output_dim * hidden_dim, sizeof(float));
     mlp->W2_v = (float*)calloc(output_dim * hidden_dim, sizeof(float));
-    mlp->R_m = (float*)calloc(output_dim * input_dim, sizeof(float));
-    mlp->R_v = (float*)calloc(output_dim * input_dim, sizeof(float));
+    mlp->R_m = (float*)calloc(input_dim * output_dim, sizeof(float));
+    mlp->R_v = (float*)calloc(input_dim * output_dim, sizeof(float));
     
     // Allocate helper arrays
     mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
@@ -53,7 +53,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
         mlp->W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W2;
     }
     
-    for (int i = 0; i < output_dim * input_dim; i++) {
+    for (int i = 0; i < input_dim * output_dim; i++) {
         mlp->R[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_R;
     }
     
@@ -97,11 +97,11 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->predictions, mlp->output_dim);
     
-    // Y += XR^T (residual connection)
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+    // Y += XR (residual connection)
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
-                mlp->R, mlp->input_dim,
+                mlp->R, mlp->output_dim,
                 1.0f, mlp->predictions, mlp->output_dim);
 }
 
@@ -120,7 +120,7 @@ float calculate_loss_mlp(MLP* mlp, float* y) {
 void zero_gradients_mlp(MLP* mlp) {
     memset(mlp->W1_grad, 0, mlp->hidden_dim * mlp->input_dim * sizeof(float));
     memset(mlp->W2_grad, 0, mlp->output_dim * mlp->hidden_dim * sizeof(float));
-    memset(mlp->R_grad, 0, mlp->output_dim * mlp->input_dim * sizeof(float));
+    memset(mlp->R_grad, 0, mlp->input_dim * mlp->output_dim * sizeof(float));
 }
 
 // Backward pass
@@ -132,12 +132,12 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->error, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
-    // ∂L/∂R = (∂L/∂Y)ᵀ * X = (X^T * (∂L/∂Y))^T
+    // ∂L/∂R = X^T * (∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
-                mlp->output_dim, mlp->input_dim, mlp->batch_size,
-                1.0f, mlp->error, mlp->output_dim,
-                X, mlp->input_dim,
-                1.0f, mlp->R_grad, mlp->input_dim);
+                mlp->input_dim, mlp->output_dim, mlp->batch_size,
+                1.0f, X, mlp->input_dim,
+                mlp->error, mlp->output_dim,
+                1.0f, mlp->R_grad, mlp->output_dim);
     
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
@@ -197,7 +197,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     }
     
     // Update R weights
-    for (int i = 0; i < mlp->output_dim * mlp->input_dim; i++) {
+    for (int i = 0; i < mlp->input_dim * mlp->output_dim; i++) {
         float grad = mlp->R_grad[i] / mlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
@@ -228,7 +228,7 @@ void save_mlp(MLP* mlp, const char* filename) {
     // Save weights
     fwrite(mlp->W1, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
     fwrite(mlp->W2, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
-    fwrite(mlp->R, sizeof(float), mlp->output_dim * mlp->input_dim, file);
+    fwrite(mlp->R, sizeof(float), mlp->input_dim * mlp->output_dim, file);
     
     // Save Adam state
     fwrite(&mlp->t, sizeof(int), 1, file);
@@ -236,8 +236,8 @@ void save_mlp(MLP* mlp, const char* filename) {
     fwrite(mlp->W1_v, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
     fwrite(mlp->W2_m, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
     fwrite(mlp->W2_v, sizeof(float), mlp->output_dim * mlp->hidden_dim, file);
-    fwrite(mlp->R_m, sizeof(float), mlp->output_dim * mlp->input_dim, file);
-    fwrite(mlp->R_v, sizeof(float), mlp->output_dim * mlp->input_dim, file);
+    fwrite(mlp->R_m, sizeof(float), mlp->input_dim * mlp->output_dim, file);
+    fwrite(mlp->R_v, sizeof(float), mlp->input_dim * mlp->output_dim, file);
 
     fclose(file);
     printf("Model saved to %s\n", filename);
@@ -267,7 +267,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     // Load weights
     fread(mlp->W1, sizeof(float), hidden_dim * input_dim, file);
     fread(mlp->W2, sizeof(float), output_dim * hidden_dim, file);
-    fread(mlp->R, sizeof(float), output_dim * input_dim, file);
+    fread(mlp->R, sizeof(float), input_dim * output_dim, file);
     
     // Load Adam state
     fread(&mlp->t, sizeof(int), 1, file);
@@ -275,8 +275,8 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     fread(mlp->W1_v, sizeof(float), hidden_dim * input_dim, file);
     fread(mlp->W2_m, sizeof(float), output_dim * hidden_dim, file);
     fread(mlp->W2_v, sizeof(float), output_dim * hidden_dim, file);
-    fread(mlp->R_m, sizeof(float), output_dim * input_dim, file);
-    fread(mlp->R_v, sizeof(float), output_dim * input_dim, file);
+    fread(mlp->R_m, sizeof(float), input_dim * output_dim, file);
+    fread(mlp->R_v, sizeof(float), input_dim * output_dim, file);
 
     fclose(file);
     printf("Model loaded from %s\n", filename);
