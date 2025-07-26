@@ -97,7 +97,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->predictions, mlp->output_dim);
     
-    // Y += XR (residual connection)
+    // Y += XR
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
