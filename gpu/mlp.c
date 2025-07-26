@@ -169,7 +169,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_layer1_output, mlp->hidden_dim,
                             &beta, mlp->d_predictions, mlp->output_dim));
     
-    // Y += XR (residual connection)
+    // Y += XR
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size, mlp->input_dim,

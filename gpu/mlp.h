@@ -36,7 +36,7 @@ typedef struct {
     // Device pointers for weights and gradients
     float* d_W1;     // hidden_dim x input_dim
     float* d_W2;     // output_dim x hidden_dim
-    float* d_R;      // input_dim x output_dim (residual connection)
+    float* d_R;      // input_dim x output_dim
     float* d_W1_grad; // hidden_dim x input_dim
     float* d_W2_grad; // output_dim x hidden_dim
     float* d_R_grad;  // input_dim x output_dim
