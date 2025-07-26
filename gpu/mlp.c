@@ -171,9 +171,9 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     
     // Y += XR (residual connection)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size, mlp->input_dim,
-                            &alpha, mlp->d_R, mlp->output_dim,
+                            &alpha, mlp->d_R, mlp->input_dim,
                             d_X, mlp->input_dim,
                             &beta_add, mlp->d_predictions, mlp->output_dim));
 }
@@ -222,13 +222,13 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_error, mlp->output_dim,
                             &beta_acc, mlp->d_W2_grad, mlp->hidden_dim));
 
-    // ∂L/∂R = X^T * (∂L/∂Y)  
+    // ∂L/∂R = X^T * (∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->input_dim, mlp->output_dim, mlp->batch_size,
                             &alpha, d_X, mlp->input_dim,
                             mlp->d_error, mlp->output_dim,
-                            &beta_acc, mlp->d_R_grad, mlp->output_dim));
+                            &beta_acc, mlp->d_R_grad, mlp->input_dim));
 
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -336,6 +336,7 @@ void save_mlp(MLP* mlp, const char* filename) {
         printf("Error opening file for writing: %s\n", filename);
         free(W1);
         free(W2);
+        free(R);
         return;
     }
     

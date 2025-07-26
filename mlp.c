@@ -131,7 +131,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
                 mlp->error, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
-    
+
     // ∂L/∂R = X^T * (∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->input_dim, mlp->output_dim, mlp->batch_size,
