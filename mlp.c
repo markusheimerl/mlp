@@ -98,10 +98,10 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 0.0f, mlp->predictions, mlp->output_dim);
     
     // Y += XR^T (residual connection)
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
-                mlp->R, mlp->output_dim,
+                mlp->R, mlp->input_dim,
                 1.0f, mlp->predictions, mlp->output_dim);
 }
 
@@ -132,12 +132,12 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->error, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
-    // ∂L/∂R = Xᵀ(∂L/∂Y)
+    // ∂L/∂R = (∂L/∂Y)ᵀ * X = (X^T * (∂L/∂Y))^T
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
-                mlp->input_dim, mlp->output_dim, mlp->batch_size,
-                1.0f, X, mlp->input_dim,
-                mlp->error, mlp->output_dim,
-                1.0f, mlp->R_grad, mlp->output_dim);
+                mlp->output_dim, mlp->input_dim, mlp->batch_size,
+                1.0f, mlp->error, mlp->output_dim,
+                X, mlp->input_dim,
+                1.0f, mlp->R_grad, mlp->input_dim);
     
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
