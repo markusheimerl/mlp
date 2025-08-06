@@ -11,14 +11,18 @@ typedef struct {
     // Weights and gradients
     float* W1;     // hidden_dim x input_dim
     float* W2;     // output_dim x hidden_dim
+    float* W3;     // output_dim x input_dim
     float* W1_grad; // hidden_dim x input_dim
     float* W2_grad; // output_dim x hidden_dim
+    float* W3_grad; // output_dim x input_dim
     
     // Adam parameters
     float* W1_m;  // First moment for W1
     float* W1_v;  // Second moment for W1
     float* W2_m;  // First moment for W2
     float* W2_v;  // Second moment for W2
+    float* W3_m;  // First moment for W3
+    float* W3_v;  // Second moment for W3
     float beta1;   // Exponential decay rate for first moment
     float beta2;   // Exponential decay rate for second moment
     float epsilon; // Small constant for numerical stability
