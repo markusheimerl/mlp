@@ -36,14 +36,18 @@ typedef struct {
     // Device pointers for weights and gradients
     float* d_W1;     // hidden_dim x input_dim
     float* d_W2;     // output_dim x hidden_dim
+    float* d_W3;     // output_dim x input_dim
     float* d_W1_grad; // hidden_dim x input_dim
     float* d_W2_grad; // output_dim x hidden_dim
+    float* d_W3_grad; // output_dim x input_dim
     
     // Device pointers for Adam parameters
     float* d_W1_m;  // First moment for W1
     float* d_W1_v;  // Second moment for W1
     float* d_W2_m;  // First moment for W2
     float* d_W2_v;  // Second moment for W2
+    float* d_W3_m;  // First moment for W3
+    float* d_W3_v;  // Second moment for W3
     float beta1;   // Exponential decay rate for first moment
     float beta2;   // Exponential decay rate for second moment
     float epsilon; // Small constant for numerical stability
