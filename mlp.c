@@ -90,15 +90,14 @@ void forward_pass_mlp(MLP* mlp, float* X) {
         mlp->layer1_output[i] = mlp->layer1_output[i] / (1.0f + expf(-mlp->layer1_output[i]));
     }
     
-    // Y = AW₂ + XW₃ (learned residual connection)
-    // First compute AW₂
+    // Y = AW₂
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->predictions, mlp->output_dim);
     
-    // Then add XW₃
+    // Y = Y + XW₃
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
