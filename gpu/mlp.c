@@ -120,14 +120,6 @@ __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activa
     }
 }
 
-// CUDA kernel for calculating error
-__global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size) {
-        error[idx] = predictions[idx] - y[idx];
-    }
-}
-
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
@@ -171,15 +163,19 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* d_y) {
     // ∂L/∂Y = Y - Y_true
-    int block_size = 256;
-    int size = mlp->batch_size * mlp->output_dim;
-    int num_blocks = (size + block_size - 1) / block_size;
-    calc_error_kernel_mlp<<<num_blocks, block_size>>>(mlp->d_error_output, mlp->d_layer2_output, d_y, size);
+    float loss = 0.0f;
 
-    float loss;
-    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, size, mlp->d_error_output, 1, mlp->d_error_output, 1, &loss));
-
-    return loss / size;
+    const float alpha = 1.0f;
+    const float beta = -1.0f;
+    CHECK_CUBLAS(cublasSgeam(mlp->cublas_handle, 
+                            CUBLAS_OP_N, CUBLAS_OP_N,
+                            mlp->output_dim, mlp->batch_size,
+                            &alpha, mlp->d_layer2_output, mlp->output_dim,
+                            &beta, d_y, mlp->output_dim,
+                            mlp->d_error_output, mlp->output_dim));
+    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, (mlp->batch_size * mlp->output_dim), mlp->d_error_output, 1, mlp->d_error_output, 1, &loss));
+    
+    return loss / (mlp->batch_size * mlp->output_dim);
 }
 
 // Zero gradients
