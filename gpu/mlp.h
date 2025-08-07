@@ -55,11 +55,11 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Device pointers for layer outputs and working buffers
-    float* d_layer1_preact;   // batch_size x hidden_dim (pre-activation Z)
-    float* d_layer1_output;   // batch_size x hidden_dim (after activation A)
-    float* d_layer2_output;   // batch_size x output_dim (final predictions Y)
-    float* d_error_output;    // batch_size x output_dim (output error)
-    float* d_error_hidden;    // batch_size x hidden_dim (hidden error)
+    float* d_layer1_preact;   // batch_size x hidden_dim
+    float* d_layer1_output;   // batch_size x hidden_dim
+    float* d_layer2_output;   // batch_size x output_dim
+    float* d_error_hidden;    // batch_size x hidden_dim
+    float* d_error_output;    // batch_size x output_dim
 
     // cuBLAS handle
     cublasHandle_t cublas_handle;
