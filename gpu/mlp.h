@@ -54,12 +54,12 @@ typedef struct {
     int t;         // Time step
     float weight_decay; // Weight decay parameter for AdamW
     
-    // Device pointers for helper arrays
-    float* d_layer1_output;   // batch_size x hidden_dim
-    float* d_predictions;     // batch_size x output_dim
-    float* d_error;          // batch_size x output_dim
-    float* d_pre_activation; // batch_size x hidden_dim
-    float* d_error_hidden;   // batch_size x hidden_dim
+    // Device pointers for layer outputs and working buffers
+    float* d_layer1_preact;   // batch_size x hidden_dim (pre-activation Z)
+    float* d_layer1_output;   // batch_size x hidden_dim (after activation A)
+    float* d_layer2_output;   // batch_size x output_dim (final predictions Y)
+    float* d_error_output;    // batch_size x output_dim (output error)
+    float* d_error_hidden;    // batch_size x hidden_dim (hidden error)
 
     // cuBLAS handle
     cublasHandle_t cublas_handle;
@@ -72,8 +72,8 @@ typedef struct {
 } MLP;
 
 // CUDA kernel prototypes
-__global__ void square_kernel_mlp(float* output, float* input, int size);
-__global__ void square_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
+__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
+__global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
 __global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size);
 __global__ void adamw_update_kernel_mlp(float* weights, float* gradients, float* m, float* v, int size, float lr, float beta1, float beta2, float eps, float weight_decay, float bias_correction1, float bias_correction2);
 
