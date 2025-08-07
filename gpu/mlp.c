@@ -105,8 +105,8 @@ void free_mlp(MLP* mlp) {
 __global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        float x = pre_activation[idx];
-        output[idx] = x / (1.0f + expf(-x));
+        float h = pre_activation[idx];
+        output[idx] = h / (1.0f + expf(-h));
     }
 }
 
@@ -114,9 +114,9 @@ __global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, i
 __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        float x = pre_activation[idx];
-        float sigmoid = 1.0f / (1.0f + expf(-x));
-        error_hidden[idx] *= sigmoid + x * sigmoid * (1.0f - sigmoid);
+        float h = pre_activation[idx];
+        float sigmoid = 1.0f / (1.0f + expf(-h));
+        error_hidden[idx] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
 }
 
@@ -125,7 +125,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // Z = XW₁
+    // H = XW₁
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
@@ -133,7 +133,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             d_X, mlp->input_dim,
                             &beta, mlp->d_layer1_preact, mlp->hidden_dim));
 
-    // A = Zσ(Z)
+    // S = Hσ(H)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
@@ -142,7 +142,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Y = AW₂
+    // Y = SW₂
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
@@ -191,7 +191,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
     const float beta_acc = 1.0f;
     const float beta = 0.0f;
 
-    // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
@@ -207,7 +207,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_error_output, mlp->output_dim,
                             &beta_acc, mlp->d_W3_grad, mlp->input_dim));
 
-    // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
+    // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
@@ -215,7 +215,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_error_output, mlp->output_dim,
                             &beta, mlp->d_error_hidden, mlp->hidden_dim));
 
-    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
+    // ∂L/∂H = ∂L/∂S ⊙ [σ(H) + Hσ(H)(1-σ(H))]
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_backward_kernel_mlp<<<num_blocks, block_size>>>(
@@ -224,7 +224,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->input_dim, mlp->hidden_dim, mlp->batch_size,

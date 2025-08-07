@@ -74,19 +74,19 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // Z = XW₁
+    // H = XW₁
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W1, mlp->hidden_dim,
                 0.0f, mlp->layer1_preact, mlp->hidden_dim);
     
-    // A = Zσ(Z)
+    // S = Hσ(H)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         mlp->layer1_output[i] = mlp->layer1_preact[i] / (1.0f + expf(-mlp->layer1_preact[i]));
     }
     
-    // Y = AW₂
+    // Y = SW₂
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
@@ -121,7 +121,7 @@ void zero_gradients_mlp(MLP* mlp) {
 
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X) {
-    // ∂L/∂W₂ = Aᵀ(∂L/∂Y)
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
@@ -135,21 +135,21 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W3_grad, mlp->output_dim);
     
-    // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
+    // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
                 1.0f, mlp->error_output, mlp->output_dim,
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
-    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
+    // ∂L/∂H = ∂L/∂S ⊙ [σ(H) + Hσ(H)(1-σ(H))]
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        float z = mlp->layer1_preact[i];
-        float sigmoid = 1.0f / (1.0f + expf(-z));
-        mlp->error_hidden[i] *= sigmoid + z * sigmoid * (1.0f - sigmoid);
+        float h = mlp->layer1_preact[i];
+        float sigmoid = 1.0f / (1.0f + expf(-h));
+        mlp->error_hidden[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
     
-    // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
