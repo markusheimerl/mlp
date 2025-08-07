@@ -85,9 +85,9 @@ void forward_pass_mlp(MLP* mlp, float* X) {
     memcpy(mlp->pre_activation, mlp->layer1_output, 
            mlp->batch_size * mlp->hidden_dim * sizeof(float));
     
-    // A = Zσ(Z)
+    // A = Z ⊗ Z (element-wise squaring)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        mlp->layer1_output[i] = mlp->layer1_output[i] / (1.0f + expf(-mlp->layer1_output[i]));
+        mlp->layer1_output[i] = mlp->layer1_output[i] * mlp->layer1_output[i];
     }
     
     // Y = AW₂
@@ -146,10 +146,9 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
-    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
+    // ∂L/∂Z = ∂L/∂A ⊙ 2Z (derivative of Z² is 2Z)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        float sigmoid = 1.0f / (1.0f + expf(-mlp->pre_activation[i]));
-        mlp->error_hidden[i] *= sigmoid + mlp->pre_activation[i] * sigmoid * (1.0f - sigmoid);
+        mlp->error_hidden[i] *= 2.0f * mlp->pre_activation[i];
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂Z)
