@@ -67,15 +67,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMalloc(&mlp->d_error_hidden, batch_size * hidden_dim * sizeof(float)));
     
     // Initialize device memory
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1, W1, 
-                         hidden_dim * input_dim * sizeof(float), 
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2, W2, 
-                         output_dim * hidden_dim * sizeof(float), 
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W3, W3, 
-                         output_dim * input_dim * sizeof(float), 
-                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1, W1, hidden_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2, W2, output_dim * hidden_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W3, W3, output_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     CHECK_CUDA(cudaMemset(mlp->d_W1_m, 0, hidden_dim * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMemset(mlp->d_W1_v, 0, hidden_dim * input_dim * sizeof(float)));
@@ -85,9 +79,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMemset(mlp->d_W3_v, 0, output_dim * input_dim * sizeof(float)));
     
     // Free local host memory
-    free(W1);
-    free(W2);
-    free(W3);
+    free(W1); free(W2); free(W3);
     
     return mlp;
 }
@@ -141,7 +133,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // Z = XW₁ (store in layer1_preact)
+    // Z = XW₁
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
@@ -149,7 +141,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             d_X, mlp->input_dim,
                             &beta, mlp->d_layer1_preact, mlp->hidden_dim));
 
-    // A = Zσ(Z) (apply swish activation and store in layer1_output)
+    // A = Zσ(Z)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
@@ -158,7 +150,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Y = AW₂ (store in layer2_output)
+    // Y = AW₂
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
@@ -166,7 +158,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->d_layer1_output, mlp->hidden_dim,
                             &beta, mlp->d_layer2_output, mlp->output_dim));
 
-    // Y = Y + XW₃ (add residual connection)
+    // Y = Y + XW₃
     const float beta_add = 1.0f;
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_T, CUBLAS_OP_N,
@@ -178,17 +170,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
 
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* d_y) {
-    // ∂L/∂Y = Y - Y_true (store error in error_output)
-    int size = mlp->batch_size * mlp->output_dim;
+    // ∂L/∂Y = Y - Y_true
     int block_size = 256;
+    int size = mlp->batch_size * mlp->output_dim;
     int num_blocks = (size + block_size - 1) / block_size;
-
-    calc_error_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_error_output,
-        mlp->d_layer2_output,
-        d_y,
-        size
-    );
+    calc_error_kernel_mlp<<<num_blocks, block_size>>>(mlp->d_error_output, mlp->d_layer2_output, d_y, size);
 
     float loss;
     CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, size, mlp->d_error_output, 1, mlp->d_error_output, 1, &loss));
@@ -198,12 +184,9 @@ float calculate_loss_mlp(MLP* mlp, float* d_y) {
 
 // Zero gradients
 void zero_gradients_mlp(MLP* mlp) {
-    CHECK_CUDA(cudaMemset(mlp->d_W1_grad, 0, 
-                         mlp->hidden_dim * mlp->input_dim * sizeof(float)));
-    CHECK_CUDA(cudaMemset(mlp->d_W2_grad, 0, 
-                         mlp->output_dim * mlp->hidden_dim * sizeof(float)));
-    CHECK_CUDA(cudaMemset(mlp->d_W3_grad, 0, 
-                         mlp->output_dim * mlp->input_dim * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W1_grad, 0, mlp->hidden_dim * mlp->input_dim * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W2_grad, 0, mlp->output_dim * mlp->hidden_dim * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W3_grad, 0, mlp->output_dim * mlp->input_dim * sizeof(float)));
 }
 
 // Backward pass
@@ -319,22 +302,14 @@ void save_mlp(MLP* mlp, const char* filename) {
     float* W3 = (float*)malloc(mlp->output_dim * mlp->input_dim * sizeof(float));
     
     // Copy weights from device to host
-    CHECK_CUDA(cudaMemcpy(W1, mlp->d_W1,
-                         mlp->hidden_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W2, mlp->d_W2,
-                         mlp->output_dim * mlp->hidden_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W3, mlp->d_W3,
-                         mlp->output_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W1, mlp->d_W1, mlp->hidden_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W2, mlp->d_W2, mlp->output_dim * mlp->hidden_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W3, mlp->d_W3, mlp->output_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
 
     FILE* file = fopen(filename, "wb");
     if (!file) {
         printf("Error opening file for writing: %s\n", filename);
-        free(W1);
-        free(W2);
-        free(W3);
+        free(W1); free(W2); free(W3);
         return;
     }
     
@@ -355,24 +330,12 @@ void save_mlp(MLP* mlp, const char* filename) {
     float* W3_m = (float*)malloc(mlp->output_dim * mlp->input_dim * sizeof(float));
     float* W3_v = (float*)malloc(mlp->output_dim * mlp->input_dim * sizeof(float));
     
-    CHECK_CUDA(cudaMemcpy(W1_m, mlp->d_W1_m, 
-                         mlp->hidden_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W1_v, mlp->d_W1_v, 
-                         mlp->hidden_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W2_m, mlp->d_W2_m, 
-                         mlp->output_dim * mlp->hidden_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W2_v, mlp->d_W2_v, 
-                         mlp->output_dim * mlp->hidden_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W3_m, mlp->d_W3_m, 
-                         mlp->output_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(W3_v, mlp->d_W3_v, 
-                         mlp->output_dim * mlp->input_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W1_m, mlp->d_W1_m, mlp->hidden_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W1_v, mlp->d_W1_v, mlp->hidden_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W2_m, mlp->d_W2_m, mlp->output_dim * mlp->hidden_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W2_v, mlp->d_W2_v, mlp->output_dim * mlp->hidden_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W3_m, mlp->d_W3_m, mlp->output_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(W3_v, mlp->d_W3_v, mlp->output_dim * mlp->input_dim * sizeof(float), cudaMemcpyDeviceToHost));
     
     fwrite(W1_m, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
     fwrite(W1_v, sizeof(float), mlp->hidden_dim * mlp->input_dim, file);
@@ -382,16 +345,11 @@ void save_mlp(MLP* mlp, const char* filename) {
     fwrite(W3_v, sizeof(float), mlp->output_dim * mlp->input_dim, file);
     
     // Free temporary host memory
-    free(W1);
-    free(W2);
-    free(W3);
-    free(W1_m);
-    free(W1_v);
-    free(W2_m);
-    free(W2_v);
-    free(W3_m);
-    free(W3_v);
-    
+    free(W1); free(W2); free(W3);
+    free(W1_m); free(W1_v);
+    free(W2_m); free(W2_v);
+    free(W3_m); free(W3_v);
+
     fclose(file);
     printf("Model saved to %s\n", filename);
 }
@@ -426,15 +384,9 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     fread(&mlp->t, sizeof(int), 1, file);
     
     // Copy weights to device
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1, W1,
-                         hidden_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2, W2,
-                         output_dim * hidden_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W3, W3,
-                         output_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1, W1, hidden_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2, W2, output_dim * hidden_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W3, W3, output_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Load Adam state variables
     float* W1_m = (float*)malloc(hidden_dim * input_dim * sizeof(float));
@@ -452,35 +404,18 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     fread(W3_v, sizeof(float), output_dim * input_dim, file);
     
     // Copy Adam state to device
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1_m, W1_m,
-                         hidden_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1_v, W1_v,
-                         hidden_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2_m, W2_m,
-                         output_dim * hidden_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2_v, W2_v,
-                         output_dim * hidden_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W3_m, W3_m,
-                         output_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W3_v, W3_v,
-                         output_dim * input_dim * sizeof(float),
-                         cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1_m, W1_m, hidden_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1_v, W1_v, hidden_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2_m, W2_m, output_dim * hidden_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2_v, W2_v, output_dim * hidden_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W3_m, W3_m, output_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W3_v, W3_v, output_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Free temporary host memory
-    free(W1);
-    free(W2);
-    free(W3);
-    free(W1_m);
-    free(W1_v);
-    free(W2_m);
-    free(W2_v);
-    free(W3_m);
-    free(W3_v);
+    free(W1); free(W2); free(W3);
+    free(W1_m); free(W1_v);
+    free(W2_m); free(W2_v);
+    free(W3_m); free(W3_v);
     
     fclose(file);
     printf("Model loaded from %s\n", filename);

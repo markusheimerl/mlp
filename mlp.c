@@ -74,26 +74,26 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // Z = XW₁ (store pre-activation)
+    // Z = XW₁
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W1, mlp->hidden_dim,
                 0.0f, mlp->layer1_preact, mlp->hidden_dim);
     
-    // A = Zσ(Z) (apply swish activation)
+    // A = Zσ(Z)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         mlp->layer1_output[i] = mlp->layer1_preact[i] / (1.0f + expf(-mlp->layer1_preact[i]));
     }
     
-    // Y = AW₂ (store in layer2_output)
+    // Y = AW₂
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->layer2_output, mlp->output_dim);
     
-    // Y = Y + XW₃ (add residual connection)
+    // Y = Y + XW₃
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
@@ -103,7 +103,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
 
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* y) {
-    // ∂L/∂Y = Y - Y_true (store error in error_output)
+    // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
     for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
         mlp->error_output[i] = mlp->layer2_output[i] - y[i];
