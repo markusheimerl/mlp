@@ -63,8 +63,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMalloc(&mlp->d_layer1_preact, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_layer1_output, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_layer2_output, batch_size * output_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_error_output, batch_size * output_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_error_hidden, batch_size * hidden_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_error_output, batch_size * output_dim * sizeof(float)));
     
     // Initialize device memory
     CHECK_CUDA(cudaMemcpy(mlp->d_W1, W1, hidden_dim * input_dim * sizeof(float), cudaMemcpyHostToDevice));

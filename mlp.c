@@ -37,8 +37,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->layer1_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->layer2_output = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrt(input_dim);
