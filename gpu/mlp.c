@@ -43,7 +43,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
         W3[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W3;
     }
     
-    // Allocate device memory
+    // Allocate device memory for weights and gradients
     CHECK_CUDA(cudaMalloc(&mlp->d_W1, hidden_dim * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W2, output_dim * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W3, output_dim * input_dim * sizeof(float)));
@@ -51,6 +51,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMalloc(&mlp->d_W2_grad, output_dim * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W3_grad, output_dim * input_dim * sizeof(float)));
     
+    // Allocate device memory for Adam parameters
     CHECK_CUDA(cudaMalloc(&mlp->d_W1_m, hidden_dim * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W1_v, hidden_dim * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W2_m, output_dim * hidden_dim * sizeof(float)));
@@ -58,10 +59,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUDA(cudaMalloc(&mlp->d_W3_m, output_dim * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W3_v, output_dim * input_dim * sizeof(float)));
     
+    // Allocate device memory for layer outputs and working buffers
+    CHECK_CUDA(cudaMalloc(&mlp->d_layer1_preact, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_layer1_output, batch_size * hidden_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_predictions, batch_size * output_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_error, batch_size * output_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_pre_activation, batch_size * hidden_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_layer2_output, batch_size * output_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_error_output, batch_size * output_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_error_hidden, batch_size * hidden_dim * sizeof(float)));
     
     // Initialize device memory
@@ -98,8 +100,8 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
     cudaFree(mlp->d_W3_m); cudaFree(mlp->d_W3_v);
-    cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_predictions); cudaFree(mlp->d_error);
-    cudaFree(mlp->d_pre_activation); cudaFree(mlp->d_error_hidden);
+    cudaFree(mlp->d_layer1_preact); cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_layer2_output);
+    cudaFree(mlp->d_error_output); cudaFree(mlp->d_error_hidden);
     
     // Destroy cuBLAS handle
     cublasDestroy(mlp->cublas_handle);
@@ -107,19 +109,22 @@ void free_mlp(MLP* mlp) {
     free(mlp);
 }
 
-// CUDA kernel for element-wise squaring
-__global__ void square_kernel_mlp(float* output, float* input, int size) {
+// CUDA kernel for Swish activation
+__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        output[idx] = input[idx] * input[idx];
+        float x = pre_activation[idx];
+        output[idx] = x / (1.0f + expf(-x));
     }
 }
 
-// CUDA kernel for element-wise squaring derivative  
-__global__ void square_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size) {
+// CUDA kernel for Swish derivative
+__global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        error_hidden[idx] *= 2.0f * pre_activation[idx];
+        float x = pre_activation[idx];
+        float sigmoid = 1.0f / (1.0f + expf(-x));
+        error_hidden[idx] *= sigmoid + x * sigmoid * (1.0f - sigmoid);
     }
 }
 
@@ -136,71 +141,57 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // Z = XW₁ - using cublasSgemmStridedBatched as requested
-    CHECK_CUBLAS(cublasSgemmStridedBatched(mlp->cublas_handle,
-                                          CUBLAS_OP_N, CUBLAS_OP_T,
-                                          mlp->hidden_dim, 1, mlp->input_dim,
-                                          &alpha, 
-                                          mlp->d_W1, mlp->hidden_dim, 0,
-                                          d_X, mlp->input_dim, mlp->input_dim,
-                                          &beta, 
-                                          mlp->d_layer1_output, mlp->hidden_dim, mlp->hidden_dim,
-                                          mlp->batch_size));
+    // Z = XW₁ (store in layer1_preact)
+    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
+                            &alpha, mlp->d_W1, mlp->input_dim,
+                            d_X, mlp->input_dim,
+                            &beta, mlp->d_layer1_preact, mlp->hidden_dim));
 
-    // Store pre-activation values for backward pass
-    CHECK_CUDA(cudaMemcpy(mlp->d_pre_activation, mlp->d_layer1_output,
-                         mlp->batch_size * mlp->hidden_dim * sizeof(float),
-                         cudaMemcpyDeviceToDevice));
-
-    // A = Z ⊗ Z (element-wise squaring)
+    // A = Zσ(Z) (apply swish activation and store in layer1_output)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
-    square_kernel_mlp<<<num_blocks, block_size>>>(
+    swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
         mlp->d_layer1_output,
-        mlp->d_pre_activation,
+        mlp->d_layer1_preact,
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Y = AW₂ - using cublasSgemmStridedBatched as requested
-    CHECK_CUBLAS(cublasSgemmStridedBatched(mlp->cublas_handle,
-                                          CUBLAS_OP_N, CUBLAS_OP_T,
-                                          mlp->output_dim, 1, mlp->hidden_dim,
-                                          &alpha,
-                                          mlp->d_W2, mlp->output_dim, 0,
-                                          mlp->d_layer1_output, mlp->hidden_dim, mlp->hidden_dim,
-                                          &beta,
-                                          mlp->d_predictions, mlp->output_dim, mlp->output_dim,
-                                          mlp->batch_size));
+    // Y = AW₂ (store in layer2_output)
+    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
+                            &alpha, mlp->d_W2, mlp->hidden_dim,
+                            mlp->d_layer1_output, mlp->hidden_dim,
+                            &beta, mlp->d_layer2_output, mlp->output_dim));
 
-    // Y = Y + XW₃ - using cublasSgemmStridedBatched as requested
+    // Y = Y + XW₃ (add residual connection)
     const float beta_add = 1.0f;
-    CHECK_CUBLAS(cublasSgemmStridedBatched(mlp->cublas_handle,
-                                          CUBLAS_OP_N, CUBLAS_OP_T,
-                                          mlp->output_dim, 1, mlp->input_dim,
-                                          &alpha,
-                                          mlp->d_W3, mlp->output_dim, 0,
-                                          d_X, mlp->input_dim, mlp->input_dim,
-                                          &beta_add,
-                                          mlp->d_predictions, mlp->output_dim, mlp->output_dim,
-                                          mlp->batch_size));
+    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            mlp->output_dim, mlp->batch_size, mlp->input_dim,
+                            &alpha, mlp->d_W3, mlp->input_dim,
+                            d_X, mlp->input_dim,
+                            &beta_add, mlp->d_layer2_output, mlp->output_dim));
 }
 
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* d_y) {
-    // ∂L/∂Y = Y - Y_true
+    // ∂L/∂Y = Y - Y_true (store error in error_output)
     int size = mlp->batch_size * mlp->output_dim;
     int block_size = 256;
     int num_blocks = (size + block_size - 1) / block_size;
 
     calc_error_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_error,
-        mlp->d_predictions,
+        mlp->d_error_output,
+        mlp->d_layer2_output,
         d_y,
         size
     );
 
     float loss;
-    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, size, mlp->d_error, 1, mlp->d_error, 1, &loss));
+    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, size, mlp->d_error_output, 1, mlp->d_error_output, 1, &loss));
 
     return loss / size;
 }
@@ -226,7 +217,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                             &alpha, mlp->d_layer1_output, mlp->hidden_dim,
-                            mlp->d_error, mlp->output_dim,
+                            mlp->d_error_output, mlp->output_dim,
                             &beta_acc, mlp->d_W2_grad, mlp->hidden_dim));
 
     // ∂L/∂W₃ = Xᵀ(∂L/∂Y)
@@ -234,7 +225,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->input_dim, mlp->output_dim, mlp->batch_size,
                             &alpha, d_X, mlp->input_dim,
-                            mlp->d_error, mlp->output_dim,
+                            mlp->d_error_output, mlp->output_dim,
                             &beta_acc, mlp->d_W3_grad, mlp->input_dim));
 
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
@@ -242,15 +233,15 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
                             &alpha, mlp->d_W2, mlp->hidden_dim,
-                            mlp->d_error, mlp->output_dim,
+                            mlp->d_error_output, mlp->output_dim,
                             &beta, mlp->d_error_hidden, mlp->hidden_dim));
 
-    // ∂L/∂Z = ∂L/∂A ⊙ 2Z (derivative of Z² is 2Z)
+    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
-    square_backward_kernel_mlp<<<num_blocks, block_size>>>(
+    swish_backward_kernel_mlp<<<num_blocks, block_size>>>(
         mlp->d_error_hidden,
-        mlp->d_pre_activation,
+        mlp->d_layer1_preact,
         mlp->batch_size * mlp->hidden_dim
     );
 

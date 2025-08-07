@@ -33,11 +33,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->W3_m = (float*)calloc(output_dim * input_dim, sizeof(float));
     mlp->W3_v = (float*)calloc(output_dim * input_dim, sizeof(float));
     
-    // Allocate helper arrays
+    // Allocate layer outputs and working buffers
+    mlp->layer1_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->error = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->pre_activation = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->layer2_output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     
     // Initialize weights
@@ -67,56 +67,47 @@ void free_mlp(MLP* mlp) {
     free(mlp->W1_m); free(mlp->W1_v);
     free(mlp->W2_m); free(mlp->W2_v);
     free(mlp->W3_m); free(mlp->W3_v);
-    free(mlp->layer1_output); free(mlp->predictions); free(mlp->error);
-    free(mlp->pre_activation); free(mlp->error_hidden);
+    free(mlp->layer1_preact); free(mlp->layer1_output); free(mlp->layer2_output);
+    free(mlp->error_output); free(mlp->error_hidden);
     free(mlp);
 }
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // Z = XW₁
-    // Note: The problem statement requested a batched for-loop pattern:
-    // for (int b = 0; b < batch_size; b++) {
-    //     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ...
-    // However, this approach is computationally inefficient for large batch sizes.
-    // The single GEMM call below is mathematically equivalent and much faster.
+    // Z = XW₁ (store pre-activation)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W1, mlp->hidden_dim,
-                0.0f, mlp->layer1_output, mlp->hidden_dim);
+                0.0f, mlp->layer1_preact, mlp->hidden_dim);
     
-    // Store Z for backward pass
-    memcpy(mlp->pre_activation, mlp->layer1_output, 
-           mlp->batch_size * mlp->hidden_dim * sizeof(float));
-    
-    // A = Z ⊗ Z (element-wise squaring) - replaces swish activation Z ⊙ σ(Z)
+    // A = Zσ(Z) (apply swish activation)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        mlp->layer1_output[i] = mlp->layer1_output[i] * mlp->layer1_output[i];
+        mlp->layer1_output[i] = mlp->layer1_preact[i] / (1.0f + expf(-mlp->layer1_preact[i]));
     }
     
-    // Y = AW₂
+    // Y = AW₂ (store in layer2_output)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
                 mlp->W2, mlp->output_dim,
-                0.0f, mlp->predictions, mlp->output_dim);
+                0.0f, mlp->layer2_output, mlp->output_dim);
     
-    // Y = Y + XW₃
+    // Y = Y + XW₃ (add residual connection)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W3, mlp->output_dim,
-                1.0f, mlp->predictions, mlp->output_dim);
+                1.0f, mlp->layer2_output, mlp->output_dim);
 }
 
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* y) {
-    // ∂L/∂Y = Y - Y_true
+    // ∂L/∂Y = Y - Y_true (store error in error_output)
     float loss = 0.0f;
     for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
-        mlp->error[i] = mlp->predictions[i] - y[i];
-        loss += mlp->error[i] * mlp->error[i];
+        mlp->error_output[i] = mlp->layer2_output[i] - y[i];
+        loss += mlp->error_output[i] * mlp->error_output[i];
     }
     return loss / (mlp->batch_size * mlp->output_dim);
 }
@@ -134,26 +125,28 @@ void backward_pass_mlp(MLP* mlp, float* X) {
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
-                mlp->error, mlp->output_dim,
+                mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
     // ∂L/∂W₃ = Xᵀ(∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->input_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
-                mlp->error, mlp->output_dim,
+                mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W3_grad, mlp->output_dim);
     
     // ∂L/∂A = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
-                1.0f, mlp->error, mlp->output_dim,
+                1.0f, mlp->error_output, mlp->output_dim,
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
-    // ∂L/∂Z = ∂L/∂A ⊙ 2Z (derivative of Z² is 2Z, replaces swish derivative)
+    // ∂L/∂Z = ∂L/∂A ⊙ [σ(Z) + Zσ(Z)(1-σ(Z))]
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        mlp->error_hidden[i] *= 2.0f * mlp->pre_activation[i];
+        float z = mlp->layer1_preact[i];
+        float sigmoid = 1.0f / (1.0f + expf(-z));
+        mlp->error_hidden[i] *= sigmoid + z * sigmoid * (1.0f - sigmoid);
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂Z)

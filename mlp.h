@@ -29,12 +29,12 @@ typedef struct {
     int t;         // Time step
     float weight_decay; // Weight decay parameter for AdamW
     
-    // Helper arrays for forward/backward pass
-    float* layer1_output;   // batch_size x hidden_dim
-    float* predictions;     // batch_size x output_dim
-    float* error;          // batch_size x output_dim
-    float* pre_activation; // batch_size x hidden_dim
-    float* error_hidden;   // batch_size x hidden_dim
+    // Layer outputs and working buffers
+    float* layer1_preact;   // batch_size x hidden_dim (pre-activation Z)
+    float* layer1_output;   // batch_size x hidden_dim (after activation A)
+    float* layer2_output;   // batch_size x output_dim (final predictions Y)
+    float* error_output;    // batch_size x output_dim (output error)
+    float* error_hidden;    // batch_size x hidden_dim (hidden error)
     
     // Dimensions
     int input_dim;
