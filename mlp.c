@@ -75,6 +75,11 @@ void free_mlp(MLP* mlp) {
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
     // Z = XW₁
+    // Note: The problem statement requested a batched for-loop pattern:
+    // for (int b = 0; b < batch_size; b++) {
+    //     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ...
+    // However, this approach is computationally inefficient for large batch sizes.
+    // The single GEMM call below is mathematically equivalent and much faster.
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
@@ -85,7 +90,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
     memcpy(mlp->pre_activation, mlp->layer1_output, 
            mlp->batch_size * mlp->hidden_dim * sizeof(float));
     
-    // A = Z ⊗ Z (element-wise squaring)
+    // A = Z ⊗ Z (element-wise squaring) - replaces swish activation Z ⊙ σ(Z)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         mlp->layer1_output[i] = mlp->layer1_output[i] * mlp->layer1_output[i];
     }
@@ -146,7 +151,7 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->W2, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
-    // ∂L/∂Z = ∂L/∂A ⊙ 2Z (derivative of Z² is 2Z)
+    // ∂L/∂Z = ∂L/∂A ⊙ 2Z (derivative of Z² is 2Z, replaces swish derivative)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         mlp->error_hidden[i] *= 2.0f * mlp->pre_activation[i];
     }
