@@ -72,8 +72,8 @@ typedef struct {
 } MLP;
 
 // CUDA kernel prototypes
-__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
-__global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
+__global__ void square_kernel_mlp(float* output, float* input, int size);
+__global__ void square_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
 __global__ void calc_error_kernel_mlp(float* error, float* predictions, float* y, int size);
 __global__ void adamw_update_kernel_mlp(float* weights, float* gradients, float* m, float* v, int size, float lr, float beta1, float beta2, float eps, float weight_decay, float bias_correction1, float bias_correction2);
 
