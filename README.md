@@ -5,9 +5,9 @@ Consider a standard feed-forward network operating on batched inputs of shape (b
 
 $$
 \begin{align*}
-Z &= XW_1 \\
-A &= Z\sigma(Z) \\
-Y &= AW_2 + XW_3
+H &= XW_1 \\
+S &= H\sigma(H) \\
+Y &= SW_2 + XW_3
 \end{align*}
 $$
 
@@ -16,11 +16,11 @@ The learned residual connection $XW_3$ allows the network to directly map input 
 $$
 \begin{align*}
 \frac{\partial L}{\partial Y} &= Y - Y_{\text{true}} \\
-\frac{\partial L}{\partial W_2} &= A^\top(\frac{\partial L}{\partial Y}) \\
+\frac{\partial L}{\partial W_2} &= S^\top(\frac{\partial L}{\partial Y}) \\
 \frac{\partial L}{\partial W_3} &= X^\top(\frac{\partial L}{\partial Y}) \\
-\frac{\partial L}{\partial A} &= (\frac{\partial L}{\partial Y})(W_2)^\top \\
-\frac{\partial L}{\partial Z} &= \frac{\partial L}{\partial A} \odot [\sigma(Z) + Z\sigma(Z)(1-\sigma(Z))] \\
-\frac{\partial L}{\partial W_1} &= X^\top(\frac{\partial L}{\partial Z})
+\frac{\partial L}{\partial S} &= (\frac{\partial L}{\partial Y})(W_2)^\top \\
+\frac{\partial L}{\partial H} &= \frac{\partial L}{\partial S} \odot [\sigma(H) + H\sigma(H)(1-\sigma(H))] \\
+\frac{\partial L}{\partial W_1} &= X^\top(\frac{\partial L}{\partial H})
 \end{align*}
 $$
 

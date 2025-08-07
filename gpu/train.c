@@ -82,7 +82,7 @@ int main() {
     forward_pass_mlp(loaded_mlp, d_X);
     
     // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_predictions, 
+    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer2_output, 
                          num_samples * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
