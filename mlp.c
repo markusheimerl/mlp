@@ -74,14 +74,12 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // Z = XW₁ - using batched pattern as requested
-    for (int b = 0; b < mlp->batch_size; b++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    1, mlp->hidden_dim, mlp->input_dim,
-                    1.0f, X + b * mlp->input_dim, mlp->input_dim,
-                    mlp->W1, mlp->hidden_dim,
-                    0.0f, mlp->layer1_output + b * mlp->hidden_dim, mlp->hidden_dim);
-    }
+    // Z = XW₁
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
+                1.0f, X, mlp->input_dim,
+                mlp->W1, mlp->hidden_dim,
+                0.0f, mlp->layer1_output, mlp->hidden_dim);
     
     // Store Z for backward pass
     memcpy(mlp->pre_activation, mlp->layer1_output, 
@@ -92,23 +90,19 @@ void forward_pass_mlp(MLP* mlp, float* X) {
         mlp->layer1_output[i] = mlp->layer1_output[i] * mlp->layer1_output[i];
     }
     
-    // Y = AW₂ - using batched pattern as requested  
-    for (int b = 0; b < mlp->batch_size; b++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    1, mlp->output_dim, mlp->hidden_dim,
-                    1.0f, mlp->layer1_output + b * mlp->hidden_dim, mlp->hidden_dim,
-                    mlp->W2, mlp->output_dim,
-                    0.0f, mlp->predictions + b * mlp->output_dim, mlp->output_dim);
-    }
+    // Y = AW₂
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
+                1.0f, mlp->layer1_output, mlp->hidden_dim,
+                mlp->W2, mlp->output_dim,
+                0.0f, mlp->predictions, mlp->output_dim);
     
-    // Y = Y + XW₃ - using batched pattern as requested
-    for (int b = 0; b < mlp->batch_size; b++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    1, mlp->output_dim, mlp->input_dim,
-                    1.0f, X + b * mlp->input_dim, mlp->input_dim,
-                    mlp->W3, mlp->output_dim,
-                    1.0f, mlp->predictions + b * mlp->output_dim, mlp->output_dim);
-    }
+    // Y = Y + XW₃
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->output_dim, mlp->input_dim,
+                1.0f, X, mlp->input_dim,
+                mlp->W3, mlp->output_dim,
+                1.0f, mlp->predictions, mlp->output_dim);
 }
 
 // Calculate loss
