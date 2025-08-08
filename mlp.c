@@ -41,9 +41,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights
-    float scale_W1 = 1.0f / sqrt(input_dim);
-    float scale_W2 = 1.0f / sqrt(hidden_dim);
-    float scale_W3 = 1.0f / sqrt(input_dim);
+    float scale_W1 = 1.0f / sqrtf(input_dim);
+    float scale_W2 = 1.0f / sqrtf(hidden_dim);
+    float scale_W3 = 1.0f / sqrtf(input_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
         mlp->W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W1;
