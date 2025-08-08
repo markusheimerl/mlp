@@ -77,7 +77,7 @@ __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activa
 __global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
 
 // Function prototypes
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size);
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle);
 void free_mlp(MLP* mlp);
 void forward_pass_mlp(MLP* mlp, float* d_X);
 float calculate_loss_mlp(MLP* mlp, float* d_y);
@@ -85,6 +85,6 @@ void zero_gradients_mlp(MLP* mlp);
 void backward_pass_mlp(MLP* mlp, float* d_X);
 void update_weights_mlp(MLP* mlp, float learning_rate);
 void save_mlp(MLP* mlp, const char* filename);
-MLP* load_mlp(const char* filename, int custom_batch_size);
+MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle);
 
 #endif
