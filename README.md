@@ -11,7 +11,7 @@ Y &= SW_2 + XW_3
 \end{align*}
 $$
 
-The learned residual connection $XW_3$ allows the network to directly map input features to the output space, providing an additional pathway for gradient flow and improving model expressiveness. The swish activation $x\sigma(x)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
+The input transformation matrix $W_1$ maps input features to hidden representations, the output projection matrix $W_2$ transforms activated hidden states to outputs, and the residual matrix $W_3$ provides direct input-output connections. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
