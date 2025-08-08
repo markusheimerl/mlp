@@ -21,7 +21,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     CHECK_CUBLAS(cublasCreate(&mlp->cublas_handle));
     CHECK_CUBLAS(cublasSetMathMode(mlp->cublas_handle, CUBLAS_TENSOR_OP_MATH));
     
-    // Allocate host memory for weights (local variables)
+    // Allocate host memory for weights
     float* W1 = (float*)malloc(hidden_dim * input_dim * sizeof(float));
     float* W2 = (float*)malloc(output_dim * hidden_dim * sizeof(float));
     float* W3 = (float*)malloc(output_dim * input_dim * sizeof(float));
