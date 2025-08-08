@@ -8,6 +8,11 @@
 int main() {
     srand(time(NULL));
 
+    // Initialize cuBLAS
+    cublasHandle_t cublas_handle;
+    CHECK_CUBLAS(cublasCreate(&cublas_handle));
+    CHECK_CUBLAS(cublasSetMathMode(cublas_handle, CUBLAS_TENSOR_OP_MATH));
+
     // Parameters
     const int input_dim = 16;
     const int hidden_dim = 1024;
@@ -27,7 +32,7 @@ int main() {
     CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Initialize network
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
     
     // Training parameters
     const int num_epochs = 10000;
@@ -71,7 +76,7 @@ int main() {
     printf("\nVerifying saved model...\n");
 
     // Load the model back with original batch_size
-    MLP* loaded_mlp = load_mlp(model_fname, batch_size);
+    MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle);
     
     // Allocate host memory for predictions
     float* predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
@@ -138,8 +143,11 @@ int main() {
     free(X);
     free(y);
     free(predictions);
+    CHECK_CUDA(cudaFree(d_X));
+    CHECK_CUDA(cudaFree(d_y));
     free_mlp(mlp);
     free_mlp(loaded_mlp);
+    CHECK_CUBLAS(cublasDestroy(cublas_handle));
     
     return 0;
 }

@@ -1,7 +1,7 @@
 #include "mlp.h"
 
 // Initialize the network with configurable dimensions
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle) {
     MLP* mlp = (MLP*)malloc(sizeof(MLP));
     
     // Store dimensions
@@ -18,8 +18,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->weight_decay = 0.01f;
     
     // Initialize cuBLAS
-    CHECK_CUBLAS(cublasCreate(&mlp->cublas_handle));
-    CHECK_CUBLAS(cublasSetMathMode(mlp->cublas_handle, CUBLAS_TENSOR_OP_MATH));
+    mlp->cublas_handle = cublas_handle;
     
     // Allocate host memory for weights
     float* W1 = (float*)malloc(hidden_dim * input_dim * sizeof(float));
@@ -94,10 +93,6 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W3_m); cudaFree(mlp->d_W3_v);
     cudaFree(mlp->d_layer1_preact); cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_layer2_output);
     cudaFree(mlp->d_error_output); cudaFree(mlp->d_error_hidden);
-    
-    // Destroy cuBLAS handle
-    cublasDestroy(mlp->cublas_handle);
-    
     free(mlp);
 }
 
@@ -351,7 +346,7 @@ void save_mlp(MLP* mlp, const char* filename) {
 }
 
 // Load model weights from binary file
-MLP* load_mlp(const char* filename, int custom_batch_size) {
+MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
@@ -367,7 +362,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     // Use custom_batch_size if provided, otherwise use stored value
     int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
     
     // Allocate temporary host memory for weights
     float* W1 = (float*)malloc(hidden_dim * input_dim * sizeof(float));
