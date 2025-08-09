@@ -26,7 +26,7 @@ int main() {
     
     // Training parameters
     const int num_epochs = 10000;
-    const float learning_rate = 0.0003f;
+    const float learning_rate = 0.0001f;  // Conservative learning rate for stability
     
     printf("Training Bilinear MLP with input-dependent scaling...\n");
     
