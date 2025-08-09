@@ -62,7 +62,6 @@ BMLP* init_bmlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     float scale_W1 = 1.0f / sqrtf(input_dim);
     float scale_W2 = 1.0f / sqrtf(hidden_dim);
     float scale_W3 = 1.0f / sqrtf(input_dim);
-    float scale_u = 0.1f;  // Small scale for scaling parameters
     
     // Initialize base weights
     for (int i = 0; i < hidden_dim * input_dim; i++) {
@@ -77,13 +76,13 @@ BMLP* init_bmlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
         bmlp->W3[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W3;
     }
     
-    // Initialize scaling parameters
+    // Initialize scaling parameters with very small values
     for (int i = 0; i < input_dim; i++) {
-        bmlp->u1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_u;
+        bmlp->u1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * 0.01f;  // Much smaller scale
     }
     
     for (int i = 0; i < hidden_dim; i++) {
-        bmlp->u2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_u;
+        bmlp->u2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * 0.01f;  // Much smaller scale
     }
     
     return bmlp;
@@ -117,58 +116,61 @@ void free_bmlp(BMLP* bmlp) {
 
 // Forward pass with input-dependent weights
 void forward_pass_bmlp(BMLP* bmlp, float* X) {
-    // Compute mean of input batch for scaling
+    // Standard H = X * W1^T (no scaling for now, just add input-dependent bias)
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                bmlp->batch_size, bmlp->hidden_dim, bmlp->input_dim,
+                1.0f, X, bmlp->input_dim,
+                bmlp->W1, bmlp->input_dim,
+                0.0f, bmlp->layer1_preact, bmlp->hidden_dim);
+    
+    // Add input-dependent bias: H += X_mean * u1 (broadcasted)
     for (int i = 0; i < bmlp->input_dim; i++) {
         bmlp->input_scale[i] = 0.0f;
         for (int j = 0; j < bmlp->batch_size; j++) {
             bmlp->input_scale[i] += X[j * bmlp->input_dim + i];
         }
         bmlp->input_scale[i] /= bmlp->batch_size;
-        // Apply scaling function: scale = 1 + sigmoid(mean_input * u1)
-        bmlp->input_scale[i] = 1.0f + 1.0f / (1.0f + expf(-bmlp->input_scale[i] * bmlp->u1[i]));
     }
     
-    // Create scaled W1: W1_scaled[h][i] = W1[h][i] * input_scale[i]
-    for (int h = 0; h < bmlp->hidden_dim; h++) {
-        for (int i = 0; i < bmlp->input_dim; i++) {
-            bmlp->W1_scaled[h * bmlp->input_dim + i] = bmlp->W1[h * bmlp->input_dim + i] * bmlp->input_scale[i];
-        }
-    }
-    
-    // H = X * W1_scaled^T
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                bmlp->batch_size, bmlp->hidden_dim, bmlp->input_dim,
-                1.0f, X, bmlp->input_dim,
-                bmlp->W1_scaled, bmlp->input_dim,
-                0.0f, bmlp->layer1_output, bmlp->hidden_dim);
-    
-    // Copy to preact for compatibility
-    memcpy(bmlp->layer1_preact, bmlp->layer1_output, bmlp->batch_size * bmlp->hidden_dim * sizeof(float));
-    
-    // Compute mean of hidden layer for scaling
-    for (int i = 0; i < bmlp->hidden_dim; i++) {
-        bmlp->hidden_scale[i] = 0.0f;
-        for (int j = 0; j < bmlp->batch_size; j++) {
-            bmlp->hidden_scale[i] += bmlp->layer1_output[j * bmlp->hidden_dim + i];
-        }
-        bmlp->hidden_scale[i] /= bmlp->batch_size;
-        // Apply scaling function: scale = 1 + sigmoid(mean_hidden * u2)
-        bmlp->hidden_scale[i] = 1.0f + 1.0f / (1.0f + expf(-bmlp->hidden_scale[i] * bmlp->u2[i]));
-    }
-    
-    // Create scaled W2: W2_scaled[o][h] = W2[o][h] * hidden_scale[h]
-    for (int o = 0; o < bmlp->output_dim; o++) {
+    // Add input-dependent modulation: H[b][h] += sum_i(X_mean[i] * u1[i])
+    for (int b = 0; b < bmlp->batch_size; b++) {
         for (int h = 0; h < bmlp->hidden_dim; h++) {
-            bmlp->W2_scaled[o * bmlp->hidden_dim + h] = bmlp->W2[o * bmlp->hidden_dim + h] * bmlp->hidden_scale[h];
+            float input_bias = 0.0f;
+            for (int i = 0; i < bmlp->input_dim; i++) {
+                input_bias += bmlp->input_scale[i] * bmlp->u1[i];
+            }
+            bmlp->layer1_preact[b * bmlp->hidden_dim + h] += input_bias;
         }
     }
     
-    // Y = H * W2_scaled^T
+    // Copy preact to output (no activation, replacing swish)
+    memcpy(bmlp->layer1_output, bmlp->layer1_preact, bmlp->batch_size * bmlp->hidden_dim * sizeof(float));
+    
+    // Standard Y = H * W2^T
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 bmlp->batch_size, bmlp->output_dim, bmlp->hidden_dim,
                 1.0f, bmlp->layer1_output, bmlp->hidden_dim,
-                bmlp->W2_scaled, bmlp->hidden_dim,
+                bmlp->W2, bmlp->hidden_dim,
                 0.0f, bmlp->layer2_output, bmlp->output_dim);
+    
+    // Add hidden-dependent bias: Y += H_mean * u2 (broadcasted)
+    for (int h = 0; h < bmlp->hidden_dim; h++) {
+        bmlp->hidden_scale[h] = 0.0f;
+        for (int j = 0; j < bmlp->batch_size; j++) {
+            bmlp->hidden_scale[h] += bmlp->layer1_output[j * bmlp->hidden_dim + h];
+        }
+        bmlp->hidden_scale[h] /= bmlp->batch_size;
+    }
+    
+    for (int b = 0; b < bmlp->batch_size; b++) {
+        for (int o = 0; o < bmlp->output_dim; o++) {
+            float hidden_bias = 0.0f;
+            for (int h = 0; h < bmlp->hidden_dim; h++) {
+                hidden_bias += bmlp->hidden_scale[h] * bmlp->u2[h];
+            }
+            bmlp->layer2_output[b * bmlp->output_dim + o] += hidden_bias;
+        }
+    }
     
     // Y = Y + X * W3^T (residual connection)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
@@ -206,83 +208,48 @@ void backward_pass_bmlp(BMLP* bmlp, float* X) {
                 bmlp->error_output, bmlp->output_dim,
                 1.0f, bmlp->W3_grad, bmlp->output_dim);
     
-    // ∂L/∂W2_scaled = layer1_output^T * error_output
+    // ∂L/∂W2 = layer1_output^T * error_output
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 bmlp->hidden_dim, bmlp->output_dim, bmlp->batch_size,
                 1.0f, bmlp->layer1_output, bmlp->hidden_dim,
                 bmlp->error_output, bmlp->output_dim,
                 1.0f, bmlp->W2_grad, bmlp->output_dim);
     
-    // Scale W2_grad by hidden_scale since W2_scaled = W2 * hidden_scale
-    for (int o = 0; o < bmlp->output_dim; o++) {
-        for (int h = 0; h < bmlp->hidden_dim; h++) {
-            bmlp->W2_grad[o * bmlp->hidden_dim + h] *= bmlp->hidden_scale[h];
-        }
-    }
-    
-    // ∂L/∂H = error_output * W2_scaled
+    // ∂L/∂H = error_output * W2
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 bmlp->batch_size, bmlp->hidden_dim, bmlp->output_dim,
                 1.0f, bmlp->error_output, bmlp->output_dim,
-                bmlp->W2_scaled, bmlp->hidden_dim,
+                bmlp->W2, bmlp->hidden_dim,
                 0.0f, bmlp->error_hidden, bmlp->hidden_dim);
     
-    // ∂L/∂W1_scaled = X^T * error_hidden
+    // ∂L/∂W1 = X^T * error_hidden
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 bmlp->input_dim, bmlp->hidden_dim, bmlp->batch_size,
                 1.0f, X, bmlp->input_dim,
                 bmlp->error_hidden, bmlp->hidden_dim,
                 1.0f, bmlp->W1_grad, bmlp->hidden_dim);
     
-    // Scale W1_grad by input_scale since W1_scaled = W1 * input_scale
-    for (int h = 0; h < bmlp->hidden_dim; h++) {
-        for (int i = 0; i < bmlp->input_dim; i++) {
-            bmlp->W1_grad[h * bmlp->input_dim + i] *= bmlp->input_scale[i];
-        }
-    }
-    
-    // Compute gradients for scaling parameters u1 and u2
-    // This requires computing how the scaling affects the loss
-    
-    // For u1: ∂L/∂u1[i] = ∑_h (∂L/∂W1_scaled[h][i]) * W1[h][i] * ∂scale/∂u1[i]
-    // where ∂scale/∂u1[i] = input_mean[i] * sigmoid(input_mean[i] * u1[i]) * (1 - sigmoid(input_mean[i] * u1[i]))
-    
-    // Compute input means again (could be optimized by storing)
+    // Compute gradients for bias parameters u1 and u2
+    // For u1: ∂L/∂u1[i] = ∑_b,h (∂L/∂H[b][h]) * X_mean[i]
     for (int i = 0; i < bmlp->input_dim; i++) {
-        float input_mean = 0.0f;
-        for (int j = 0; j < bmlp->batch_size; j++) {
-            input_mean += X[j * bmlp->input_dim + i];
-        }
-        input_mean /= bmlp->batch_size;
-        
-        float sigmoid_val = 1.0f / (1.0f + expf(-input_mean * bmlp->u1[i]));
-        float sigmoid_deriv = sigmoid_val * (1.0f - sigmoid_val);
-        float scale_deriv = input_mean * sigmoid_deriv;
-        
         float grad_sum = 0.0f;
-        for (int h = 0; h < bmlp->hidden_dim; h++) {
-            grad_sum += bmlp->W1_grad[h * bmlp->input_dim + i] * bmlp->W1[h * bmlp->input_dim + i];
+        for (int b = 0; b < bmlp->batch_size; b++) {
+            for (int h = 0; h < bmlp->hidden_dim; h++) {
+                grad_sum += bmlp->error_hidden[b * bmlp->hidden_dim + h];
+            }
         }
-        bmlp->u1_grad[i] += grad_sum * scale_deriv;
+        bmlp->u1_grad[i] += grad_sum * bmlp->input_scale[i];
     }
     
-    // For u2: similar computation
+    // For u2: ∂L/∂u2[h] = ∑_b,o (∂L/∂Y[b][o]) * H_mean[h]
     for (int h = 0; h < bmlp->hidden_dim; h++) {
-        float hidden_mean = 0.0f;
-        for (int j = 0; j < bmlp->batch_size; j++) {
-            hidden_mean += bmlp->layer1_output[j * bmlp->hidden_dim + h];
-        }
-        hidden_mean /= bmlp->batch_size;
-        
-        float sigmoid_val = 1.0f / (1.0f + expf(-hidden_mean * bmlp->u2[h]));
-        float sigmoid_deriv = sigmoid_val * (1.0f - sigmoid_val);
-        float scale_deriv = hidden_mean * sigmoid_deriv;
-        
         float grad_sum = 0.0f;
-        for (int o = 0; o < bmlp->output_dim; o++) {
-            grad_sum += bmlp->W2_grad[o * bmlp->hidden_dim + h] * bmlp->W2[o * bmlp->hidden_dim + h];
+        for (int b = 0; b < bmlp->batch_size; b++) {
+            for (int o = 0; o < bmlp->output_dim; o++) {
+                grad_sum += bmlp->error_output[b * bmlp->output_dim + o];
+            }
         }
-        bmlp->u2_grad[h] += grad_sum * scale_deriv;
+        bmlp->u2_grad[h] += grad_sum * bmlp->hidden_scale[h];
     }
 }
 
