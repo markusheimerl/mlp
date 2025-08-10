@@ -112,16 +112,15 @@ void forward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             d_X, bmlp->input_dim,
                             &beta, bmlp->d_layer1_output, bmlp->hidden_dim));
 
-    // Compute outer products (H ⊗ H) using batched GEMM
-    // For each sample: outer_product[b] = H[b] @ H[b]^T (column vector @ row vector)
+    // Compute outer products (H ⊗ H)
     CHECK_CUBLAS(cublasSgemmStridedBatched(bmlp->cublas_handle,
                                           CUBLAS_OP_N, CUBLAS_OP_T,
                                           bmlp->hidden_dim, bmlp->hidden_dim, 1,
                                           &alpha,
-                                          bmlp->d_layer1_output, bmlp->hidden_dim, bmlp->hidden_dim,  // A: column vectors, stride = hidden_dim
-                                          bmlp->d_layer1_output, bmlp->hidden_dim, bmlp->hidden_dim,  // B: same vectors (transposed), stride = hidden_dim
+                                          bmlp->d_layer1_output, bmlp->hidden_dim, bmlp->hidden_dim,
+                                          bmlp->d_layer1_output, bmlp->hidden_dim, bmlp->hidden_dim,
                                           &beta,
-                                          bmlp->d_outer_product, bmlp->hidden_dim, bmlp->hidden_dim * bmlp->hidden_dim, // C: outer products
+                                          bmlp->d_outer_product, bmlp->hidden_dim, bmlp->hidden_dim * bmlp->hidden_dim,
                                           bmlp->batch_size));
 
     // Y = (H ⊗ H) @ W2^T
