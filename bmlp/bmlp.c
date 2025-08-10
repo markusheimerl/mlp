@@ -42,7 +42,7 @@ BMLP* init_bmlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrtf(input_dim);
-    float scale_W2 = 0.1f / sqrtf(hidden_dim);
+    float scale_W2 = 1.0f / sqrtf(hidden_dim);
     float scale_W3 = 1.0f / sqrtf(input_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
@@ -84,10 +84,11 @@ void forward_pass_bmlp(BMLP* bmlp, float* X) {
     
     // Compute outer products (H ⊗ H)
     for (int b = 0; b < bmlp->batch_size; b++) {
-        cblas_sger(CblasRowMajor, bmlp->hidden_dim, bmlp->hidden_dim,
-                   1.0f, &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
-                   &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
-                   &bmlp->outer_product[b * bmlp->hidden_dim * bmlp->hidden_dim], bmlp->hidden_dim);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                    bmlp->hidden_dim, bmlp->hidden_dim, 1,
+                    1.0f, &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
+                    &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
+                    0.0f, &bmlp->outer_product[b * bmlp->hidden_dim * bmlp->hidden_dim], bmlp->hidden_dim);
     }
     
     // Y = (H ⊗ H) @ W2^T
@@ -146,14 +147,16 @@ void backward_pass_bmlp(BMLP* bmlp, float* X) {
                 bmlp->W2, bmlp->hidden_dim * bmlp->hidden_dim,
                 0.0f, bmlp->outer_product, bmlp->hidden_dim * bmlp->hidden_dim);
     
-    // ∂L/∂H using chain rule with (H ⊗ H)
+    // ∂L/∂H using chain rule for (H ⊗ H)
     for (int b = 0; b < bmlp->batch_size; b++) {
-        cblas_sgemv(CblasRowMajor, CblasNoTrans, bmlp->hidden_dim, bmlp->hidden_dim,
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                    bmlp->hidden_dim, 1, bmlp->hidden_dim,
                     1.0f, &bmlp->outer_product[b * bmlp->hidden_dim * bmlp->hidden_dim], bmlp->hidden_dim,
                     &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
                     0.0f, &bmlp->error_hidden[b * bmlp->hidden_dim], 1);
         
-        cblas_sgemv(CblasRowMajor, CblasTrans, bmlp->hidden_dim, bmlp->hidden_dim,
+        cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                    bmlp->hidden_dim, 1, bmlp->hidden_dim,
                     1.0f, &bmlp->outer_product[b * bmlp->hidden_dim * bmlp->hidden_dim], bmlp->hidden_dim,
                     &bmlp->layer1_output[b * bmlp->hidden_dim], 1,
                     1.0f, &bmlp->error_hidden[b * bmlp->hidden_dim], 1);
