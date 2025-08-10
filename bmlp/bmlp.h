@@ -1,5 +1,5 @@
-#ifndef MLP_H
-#define MLP_H
+#ifndef BMLP_H
+#define BMLP_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,17 +41,17 @@ typedef struct {
     int hidden_dim;
     int output_dim;
     int batch_size;
-} MLP;
+} BMLP;
 
 // Function prototypes
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size);
-void free_mlp(MLP* mlp);
-void forward_pass_mlp(MLP* mlp, float* X);
-float calculate_loss_mlp(MLP* mlp, float* y);
-void zero_gradients_mlp(MLP* mlp);
-void backward_pass_mlp(MLP* mlp, float* X);
-void update_weights_mlp(MLP* mlp, float learning_rate);
-void save_mlp(MLP* mlp, const char* filename);
-MLP* load_mlp(const char* filename, int custom_batch_size);
+BMLP* init_bmlp(int input_dim, int hidden_dim, int output_dim, int batch_size);
+void free_bmlp(BMLP* bmlp);
+void forward_pass_bmlp(BMLP* bmlp, float* X);
+float calculate_loss_bmlp(BMLP* bmlp, float* y);
+void zero_gradients_bmlp(BMLP* bmlp);
+void backward_pass_bmlp(BMLP* bmlp, float* X);
+void update_weights_bmlp(BMLP* bmlp, float learning_rate);
+void save_bmlp(BMLP* bmlp, const char* filename);
+BMLP* load_bmlp(const char* filename, int custom_batch_size);
 
 #endif
