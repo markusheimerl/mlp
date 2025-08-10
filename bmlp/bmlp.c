@@ -108,24 +108,13 @@ void forward_pass_bmlp(BMLP* bmlp, float* X) {
 
 // Calculate loss
 float calculate_loss_bmlp(BMLP* bmlp, float* y) {
+    // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
-    int N = bmlp->batch_size * bmlp->output_dim;
-    
-    // First compute loss and store unscaled errors
-    for (int i = 0; i < N; i++) {
-        float err = bmlp->layer2_output[i] - y[i];
-        loss += err * err;
-        bmlp->error_output[i] = err;  // Store unscaled temporarily
+    for (int i = 0; i < bmlp->batch_size * bmlp->output_dim; i++) {
+        bmlp->error_output[i] = bmlp->layer2_output[i] - y[i];
+        loss += bmlp->error_output[i] * bmlp->error_output[i];
     }
-    loss /= N;  // Report: L = (1/N) * Σ(error²)
-    
-    // Scale error_output for correct gradients: ∂L/∂Y = (2/N) * (pred - true)
-    float grad_scale = 2.0f / N;
-    for (int i = 0; i < N; i++) {
-        bmlp->error_output[i] *= grad_scale;
-    }
-    
-    return loss;
+    return loss / (bmlp->batch_size * bmlp->output_dim);
 }
 
 // Zero gradients
@@ -191,7 +180,7 @@ void update_weights_bmlp(BMLP* bmlp, float learning_rate) {
     
     // Update W1 weights
     for (int i = 0; i < bmlp->hidden_dim * bmlp->input_dim; i++) {
-        float grad = bmlp->W1_grad[i];
+        float grad = bmlp->W1_grad[i] / bmlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         bmlp->W1_m[i] = bmlp->beta1 * bmlp->W1_m[i] + (1.0f - bmlp->beta1) * grad;
@@ -205,7 +194,7 @@ void update_weights_bmlp(BMLP* bmlp, float learning_rate) {
     
     // Update W2 weights
     for (int i = 0; i < bmlp->output_dim * bmlp->hidden_dim * bmlp->hidden_dim; i++) {
-        float grad = bmlp->W2_grad[i];
+        float grad = bmlp->W2_grad[i] / bmlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         bmlp->W2_m[i] = bmlp->beta1 * bmlp->W2_m[i] + (1.0f - bmlp->beta1) * grad;
@@ -219,7 +208,7 @@ void update_weights_bmlp(BMLP* bmlp, float learning_rate) {
     
     // Update W3 weights
     for (int i = 0; i < bmlp->output_dim * bmlp->input_dim; i++) {
-        float grad = bmlp->W3_grad[i];
+        float grad = bmlp->W3_grad[i] / bmlp->batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         bmlp->W3_m[i] = bmlp->beta1 * bmlp->W3_m[i] + (1.0f - bmlp->beta1) * grad;
