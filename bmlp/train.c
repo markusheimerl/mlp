@@ -3,7 +3,7 @@
 #include <math.h>
 #include <time.h>
 #include <cblas.h>
-#include "data.h"
+#include "../data.h"
 #include "bmlp.h"
 
 int main() {
