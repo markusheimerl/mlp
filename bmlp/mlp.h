@@ -10,7 +10,7 @@
 typedef struct {
     // Weights and gradients
     float* W1;     // hidden_dim x input_dim
-    float* W2;     // output_dim x (hidden_dim * hidden_dim) - bilinear weights
+    float* W2;     // output_dim x (hidden_dim * hidden_dim)
     float* W3;     // output_dim x input_dim
     float* W1_grad; // hidden_dim x input_dim
     float* W2_grad; // output_dim x (hidden_dim * hidden_dim)
@@ -30,7 +30,7 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Layer outputs and working buffers
-    float* layer1_output;   // batch_size x hidden_dim (no activation, just linear)
+    float* layer1_output;   // batch_size x hidden_dim
     float* layer2_output;   // batch_size x output_dim
     float* error_hidden;    // batch_size x hidden_dim
     float* error_output;    // batch_size x output_dim
