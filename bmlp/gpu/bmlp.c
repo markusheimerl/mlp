@@ -195,9 +195,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             &beta, bmlp->d_outer_grad, bmlp->hidden_dim * bmlp->hidden_dim));
 
     // ∂L/∂H using chain rule for (H ⊗ H)
-    // For outer product H @ H^T, gradient is: ∂L/∂H = ∂L/∂(H⊗H) @ H + ∂L/∂(H⊗H)^T @ H
-    
-    // First part: ∂L/∂(H⊗H) @ H for each sample using batched GEMV
+    // ∂L/∂(H⊗H) @ H
     CHECK_CUBLAS(cublasSgemmStridedBatched(bmlp->cublas_handle,
                                           CUBLAS_OP_N, CUBLAS_OP_N,
                                           bmlp->hidden_dim, 1, bmlp->hidden_dim,
@@ -208,7 +206,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                                           bmlp->d_error_hidden, bmlp->hidden_dim, bmlp->hidden_dim,
                                           bmlp->batch_size));
 
-    // Second part: ∂L/∂(H⊗H)^T @ H for each sample and add to the result
+    // ∂L/∂(H⊗H)^T @ H
     CHECK_CUBLAS(cublasSgemmStridedBatched(bmlp->cublas_handle,
                                           CUBLAS_OP_T, CUBLAS_OP_N,
                                           bmlp->hidden_dim, 1, bmlp->hidden_dim,
