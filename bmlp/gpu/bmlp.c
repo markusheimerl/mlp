@@ -170,7 +170,6 @@ void zero_gradients_bmlp(BMLP* bmlp) {
 void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
-    const float beta_add = 1.0f;
 
     // ∂L/∂W₃ = Xᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(bmlp->cublas_handle,
@@ -178,7 +177,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             bmlp->input_dim, bmlp->output_dim, bmlp->batch_size,
                             &alpha, d_X, bmlp->input_dim,
                             bmlp->d_error_output, bmlp->output_dim,
-                            &beta_add, bmlp->d_W3_grad, bmlp->input_dim));
+                            &alpha, bmlp->d_W3_grad, bmlp->input_dim));
 
     // ∂L/∂W₂ = (∂L/∂Y)ᵀ @ (H ⊗ H)
     CHECK_CUBLAS(cublasSgemm(bmlp->cublas_handle,
@@ -186,7 +185,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             bmlp->output_dim, bmlp->hidden_dim * bmlp->hidden_dim, bmlp->batch_size,
                             &alpha, bmlp->d_error_output, bmlp->output_dim,
                             bmlp->d_outer_product, bmlp->hidden_dim * bmlp->hidden_dim,
-                            &beta_add, bmlp->d_W2_grad, bmlp->output_dim));
+                            &alpha, bmlp->d_W2_grad, bmlp->output_dim));
 
     // Compute gradient w.r.t (H ⊗ H)
     CHECK_CUBLAS(cublasSgemm(bmlp->cublas_handle,
@@ -217,7 +216,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                                           &alpha,
                                           bmlp->d_outer_grad, bmlp->hidden_dim, bmlp->hidden_dim * bmlp->hidden_dim,
                                           bmlp->d_layer1_output, bmlp->hidden_dim, bmlp->hidden_dim,
-                                          &alpha, // Use alpha=1 to add to existing result
+                                          &alpha,
                                           bmlp->d_error_hidden, bmlp->hidden_dim, bmlp->hidden_dim,
                                           bmlp->batch_size));
 
@@ -227,7 +226,7 @@ void backward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             bmlp->input_dim, bmlp->hidden_dim, bmlp->batch_size,
                             &alpha, d_X, bmlp->input_dim,
                             bmlp->d_error_hidden, bmlp->hidden_dim,
-                            &beta_add, bmlp->d_W1_grad, bmlp->input_dim));
+                            &alpha, bmlp->d_W1_grad, bmlp->input_dim));
 }
 
 // CUDA kernel for AdamW update
