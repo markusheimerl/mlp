@@ -105,11 +105,23 @@ void forward_pass_mlp(MLP* mlp, float* X) {
 float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
-    for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
-        mlp->error_output[i] = mlp->layer2_output[i] - y[i];
-        loss += mlp->error_output[i] * mlp->error_output[i];
+    int N = mlp->batch_size * mlp->output_dim;
+    
+    // First compute loss and store unscaled errors
+    for (int i = 0; i < N; i++) {
+        float err = mlp->layer2_output[i] - y[i];
+        loss += err * err;
+        mlp->error_output[i] = err;  // Store unscaled temporarily
     }
-    return loss / (mlp->batch_size * mlp->output_dim);
+    loss /= N;  // Report: L = (1/N) * Σ(error²)
+    
+    // Scale error_output for correct gradients: ∂L/∂Y = (2/N) * (pred - true)
+    float grad_scale = 2.0f / N;
+    for (int i = 0; i < N; i++) {
+        mlp->error_output[i] *= grad_scale;
+    }
+    
+    return loss;
 }
 
 // Zero gradients
@@ -167,7 +179,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     
     // Update W1 weights
     for (int i = 0; i < mlp->hidden_dim * mlp->input_dim; i++) {
-        float grad = mlp->W1_grad[i] / mlp->batch_size;
+        float grad = mlp->W1_grad[i];
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         mlp->W1_m[i] = mlp->beta1 * mlp->W1_m[i] + (1.0f - mlp->beta1) * grad;
@@ -181,7 +193,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     
     // Update W2 weights
     for (int i = 0; i < mlp->output_dim * mlp->hidden_dim; i++) {
-        float grad = mlp->W2_grad[i] / mlp->batch_size;
+        float grad = mlp->W2_grad[i];
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         mlp->W2_m[i] = mlp->beta1 * mlp->W2_m[i] + (1.0f - mlp->beta1) * grad;
@@ -195,7 +207,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     
     // Update W3 weights
     for (int i = 0; i < mlp->output_dim * mlp->input_dim; i++) {
-        float grad = mlp->W3_grad[i] / mlp->batch_size;
+        float grad = mlp->W3_grad[i];
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         mlp->W3_m[i] = mlp->beta1 * mlp->W3_m[i] + (1.0f - mlp->beta1) * grad;

@@ -108,6 +108,7 @@ void forward_pass_bmlp(BMLP* bmlp, float* X) {
 
 // Calculate loss
 float calculate_loss_bmlp(BMLP* bmlp, float* y) {
+    // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
     int N = bmlp->batch_size * bmlp->output_dim;
     
