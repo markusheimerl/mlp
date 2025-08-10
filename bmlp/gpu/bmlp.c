@@ -102,7 +102,6 @@ void free_bmlp(BMLP* bmlp) {
 void forward_pass_bmlp(BMLP* bmlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
-    const float beta_add = 1.0f;
     
     // H = XW₁
     CHECK_CUBLAS(cublasSgemm(bmlp->cublas_handle,
@@ -137,7 +136,7 @@ void forward_pass_bmlp(BMLP* bmlp, float* d_X) {
                             bmlp->output_dim, bmlp->batch_size, bmlp->input_dim,
                             &alpha, bmlp->d_W3, bmlp->input_dim,
                             d_X, bmlp->input_dim,
-                            &beta_add, bmlp->d_layer2_output, bmlp->output_dim));
+                            &alpha, bmlp->d_layer2_output, bmlp->output_dim));
 }
 
 // Calculate loss

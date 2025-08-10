@@ -119,7 +119,6 @@ __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activa
 void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
-    const float beta_add = 1.0f;
     
     // H = XW₁
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -152,7 +151,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->output_dim, mlp->batch_size, mlp->input_dim,
                             &alpha, mlp->d_W3, mlp->input_dim,
                             d_X, mlp->input_dim,
-                            &beta_add, mlp->d_layer2_output, mlp->output_dim));
+                            &alpha, mlp->d_layer2_output, mlp->output_dim));
 }
 
 // Calculate loss
@@ -184,7 +183,6 @@ void zero_gradients_mlp(MLP* mlp) {
 void backward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
-    const float beta_add = 1.0f;
 
     // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -192,7 +190,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                             &alpha, mlp->d_layer1_output, mlp->hidden_dim,
                             mlp->d_error_output, mlp->output_dim,
-                            &beta_add, mlp->d_W2_grad, mlp->hidden_dim));
+                            &alpha, mlp->d_W2_grad, mlp->hidden_dim));
 
     // ∂L/∂W₃ = Xᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -200,7 +198,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->input_dim, mlp->output_dim, mlp->batch_size,
                             &alpha, d_X, mlp->input_dim,
                             mlp->d_error_output, mlp->output_dim,
-                            &beta_add, mlp->d_W3_grad, mlp->input_dim));
+                            &alpha, mlp->d_W3_grad, mlp->input_dim));
 
     // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -225,7 +223,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                             &alpha, d_X, mlp->input_dim,
                             mlp->d_error_hidden, mlp->hidden_dim,
-                            &beta_add, mlp->d_W1_grad, mlp->input_dim));
+                            &alpha, mlp->d_W1_grad, mlp->input_dim));
 }
 
 // CUDA kernel for AdamW update
