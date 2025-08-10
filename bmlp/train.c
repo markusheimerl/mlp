@@ -12,9 +12,9 @@ int main() {
 
     // Parameters
     const int input_dim = 16;
-    const int hidden_dim = 256;
+    const int hidden_dim = 64;
     const int output_dim = 4;
-    const int num_samples = 256;
+    const int num_samples = 128;
     const int batch_size = num_samples; // Full batch training
     
     // Generate synthetic data
