@@ -42,7 +42,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrtf(input_dim);
-    float scale_W2 = 0.01f / sqrtf(hidden_dim);  // Small init for bilinear layer
+    float scale_W2 = 0.1f / sqrtf(hidden_dim);
     float scale_W3 = 1.0f / sqrtf(input_dim);
     
     for (int i = 0; i < hidden_dim * input_dim; i++) {
@@ -75,14 +75,14 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // H = XW₁ (no activation - just linear)
+    // H = XW₁
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W1, mlp->hidden_dim,
                 0.0f, mlp->layer1_output, mlp->hidden_dim);
     
-    // Compute outer products H ⊗ H for each sample
+    // Compute outer products (H ⊗ H)
     for (int b = 0; b < mlp->batch_size; b++) {
         cblas_sger(CblasRowMajor, mlp->hidden_dim, mlp->hidden_dim,
                    1.0f, &mlp->layer1_output[b * mlp->hidden_dim], 1,
@@ -90,7 +90,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                    &mlp->outer_product[b * mlp->hidden_dim * mlp->hidden_dim], mlp->hidden_dim);
     }
     
-    // Y = outer_product @ W2^T
+    // Y = (H ⊗ H) @ W2^T
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim * mlp->hidden_dim,
                 1.0f, mlp->outer_product, mlp->hidden_dim * mlp->hidden_dim,
@@ -132,21 +132,21 @@ void backward_pass_mlp(MLP* mlp, float* X) {
                 mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W3_grad, mlp->output_dim);
     
-    // ∂L/∂W₂ = (∂L/∂Y)ᵀ @ outer_product
+    // ∂L/∂W₂ = (∂L/∂Y)ᵀ @ (H ⊗ H)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->output_dim, mlp->hidden_dim * mlp->hidden_dim, mlp->batch_size,
                 1.0f, mlp->error_output, mlp->output_dim,
                 mlp->outer_product, mlp->hidden_dim * mlp->hidden_dim,
                 1.0f, mlp->W2_grad, mlp->hidden_dim * mlp->hidden_dim);
     
-    // Compute gradient w.r.t outer product (reuse outer_product buffer)
+    // Compute gradient w.r.t (H ⊗ H)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->hidden_dim * mlp->hidden_dim, mlp->output_dim,
                 1.0f, mlp->error_output, mlp->output_dim,
                 mlp->W2, mlp->hidden_dim * mlp->hidden_dim,
                 0.0f, mlp->outer_product, mlp->hidden_dim * mlp->hidden_dim);
     
-    // ∂L/∂H using chain rule with outer product
+    // ∂L/∂H using chain rule with (H ⊗ H)
     for (int b = 0; b < mlp->batch_size; b++) {
         cblas_sgemv(CblasRowMajor, CblasNoTrans, mlp->hidden_dim, mlp->hidden_dim,
                     1.0f, &mlp->outer_product[b * mlp->hidden_dim * mlp->hidden_dim], mlp->hidden_dim,
