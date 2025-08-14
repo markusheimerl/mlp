@@ -36,7 +36,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     // Allocate layer outputs and working buffers
     mlp->layer1_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->layer1_output = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->layer2_output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->layer2_preact = (float*)malloc(batch_size * output_dim * sizeof(float));
     mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
@@ -67,7 +67,7 @@ void free_mlp(MLP* mlp) {
     free(mlp->W1_m); free(mlp->W1_v);
     free(mlp->W2_m); free(mlp->W2_v);
     free(mlp->W3_m); free(mlp->W3_v);
-    free(mlp->layer1_preact); free(mlp->layer1_output); free(mlp->layer2_output);
+    free(mlp->layer1_preact); free(mlp->layer1_output); free(mlp->layer2_preact);
     free(mlp->error_output); free(mlp->error_hidden);
     free(mlp);
 }
@@ -91,14 +91,14 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
                 1.0f, mlp->layer1_output, mlp->hidden_dim,
                 mlp->W2, mlp->output_dim,
-                0.0f, mlp->layer2_output, mlp->output_dim);
+                0.0f, mlp->layer2_preact, mlp->output_dim);
     
     // Y = Y + XW₃
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W3, mlp->output_dim,
-                1.0f, mlp->layer2_output, mlp->output_dim);
+                1.0f, mlp->layer2_preact, mlp->output_dim);
 }
 
 // Calculate loss
@@ -106,7 +106,7 @@ float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
     for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
-        mlp->error_output[i] = mlp->layer2_output[i] - y[i];
+        mlp->error_output[i] = mlp->layer2_preact[i] - y[i];
         loss += mlp->error_output[i] * mlp->error_output[i];
     }
     return loss / (mlp->batch_size * mlp->output_dim);
