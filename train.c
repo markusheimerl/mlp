@@ -89,7 +89,7 @@ int main() {
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            float diff_res = y[j * output_dim + i] - loaded_mlp->layer2_output[j * output_dim + i];
+            float diff_res = y[j * output_dim + i] - loaded_mlp->layer2_preact[j * output_dim + i];
             float diff_tot = y[j * output_dim + i] - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
@@ -106,7 +106,7 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = loaded_mlp->layer2_output[j * output_dim + i];
+            float pred = loaded_mlp->layer2_preact[j * output_dim + i];
             float actual = y[j * output_dim + i];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
@@ -115,7 +115,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            mae += fabs(loaded_mlp->layer2_output[j * output_dim + i] - y[j * output_dim + i]);
+            mae += fabs(loaded_mlp->layer2_preact[j * output_dim + i] - y[j * output_dim + i]);
         }
         mae /= num_samples;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);

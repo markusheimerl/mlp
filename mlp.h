@@ -32,7 +32,7 @@ typedef struct {
     // Layer outputs and working buffers
     float* layer1_preact;   // batch_size x hidden_dim
     float* layer1_output;   // batch_size x hidden_dim
-    float* layer2_output;   // batch_size x output_dim
+    float* layer2_preact;   // batch_size x output_dim
     float* error_hidden;    // batch_size x hidden_dim
     float* error_output;    // batch_size x output_dim
     

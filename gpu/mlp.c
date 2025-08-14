@@ -61,7 +61,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     // Allocate device memory for layer outputs and working buffers
     CHECK_CUDA(cudaMalloc(&mlp->d_layer1_preact, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_layer1_output, batch_size * hidden_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer2_output, batch_size * output_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_layer2_preact, batch_size * output_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_error_hidden, batch_size * hidden_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_error_output, batch_size * output_dim * sizeof(float)));
     
@@ -91,7 +91,7 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
     cudaFree(mlp->d_W3_m); cudaFree(mlp->d_W3_v);
-    cudaFree(mlp->d_layer1_preact); cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_layer2_output);
+    cudaFree(mlp->d_layer1_preact); cudaFree(mlp->d_layer1_output); cudaFree(mlp->d_layer2_preact);
     cudaFree(mlp->d_error_output); cudaFree(mlp->d_error_hidden);
     free(mlp);
 }
@@ -143,7 +143,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
                             &alpha, mlp->d_W2, mlp->hidden_dim,
                             mlp->d_layer1_output, mlp->hidden_dim,
-                            &beta, mlp->d_layer2_output, mlp->output_dim));
+                            &beta, mlp->d_layer2_preact, mlp->output_dim));
 
     // Y = Y + XW₃
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
@@ -151,7 +151,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                             mlp->output_dim, mlp->batch_size, mlp->input_dim,
                             &alpha, mlp->d_W3, mlp->input_dim,
                             d_X, mlp->input_dim,
-                            &alpha, mlp->d_layer2_output, mlp->output_dim));
+                            &alpha, mlp->d_layer2_preact, mlp->output_dim));
 }
 
 // Calculate loss
@@ -164,7 +164,7 @@ float calculate_loss_mlp(MLP* mlp, float* d_y) {
     CHECK_CUBLAS(cublasSgeam(mlp->cublas_handle, 
                             CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size,
-                            &alpha, mlp->d_layer2_output, mlp->output_dim,
+                            &alpha, mlp->d_layer2_preact, mlp->output_dim,
                             &beta, d_y, mlp->output_dim,
                             mlp->d_error_output, mlp->output_dim));
     CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, (mlp->batch_size * mlp->output_dim), mlp->d_error_output, 1, mlp->d_error_output, 1, &loss));

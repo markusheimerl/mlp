@@ -57,7 +57,7 @@ typedef struct {
     // Device pointers for layer outputs and working buffers
     float* d_layer1_preact;   // batch_size x hidden_dim
     float* d_layer1_output;   // batch_size x hidden_dim
-    float* d_layer2_output;   // batch_size x output_dim
+    float* d_layer2_preact;   // batch_size x output_dim
     float* d_error_hidden;    // batch_size x hidden_dim
     float* d_error_output;    // batch_size x output_dim
 
