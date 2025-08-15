@@ -15,8 +15,9 @@ int main() {
 
     // Parameters
     const int input_dim = 16;
-    const int hidden_dim = 1024;
+    const int hidden_dim = 256;
     const int output_dim = 4;
+    const int num_layers = 2;
     const int num_samples = 1024;
     const int batch_size = num_samples; // Full batch training
     
@@ -32,11 +33,11 @@ int main() {
     CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Initialize network
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, num_layers, batch_size, cublas_handle);
     
     // Training parameters
     const int num_epochs = 10000;
-    const float learning_rate = 0.0003f;
+    const float learning_rate = 0.0002f;
     
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
@@ -84,8 +85,9 @@ int main() {
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, d_X);
     
-    // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer2_preact, 
+    // Copy predictions from device to host (from last layer)
+    int last_layer = loaded_mlp->num_layers - 1;
+    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer_output[last_layer], 
                          num_samples * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
