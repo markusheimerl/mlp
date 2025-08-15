@@ -12,9 +12,9 @@ int main() {
 
     // Parameters
     const int input_dim = 16;
-    const int hidden_dim = 128;
+    const int hidden_dim = 256;
     const int output_dim = 4;
-    const int num_layers = 4;
+    const int num_layers = 2;
     const int num_samples = 1024;
     const int batch_size = num_samples; // Full batch training
     
@@ -27,7 +27,7 @@ int main() {
     
     // Training parameters
     const int num_epochs = 10000;
-    const float learning_rate = 0.0003f;
+    const float learning_rate = 0.0002f;
     
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
