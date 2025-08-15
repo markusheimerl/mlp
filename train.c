@@ -12,8 +12,9 @@ int main() {
 
     // Parameters
     const int input_dim = 16;
-    const int hidden_dim = 1024;
+    const int hidden_dim = 128;
     const int output_dim = 4;
+    const int num_layers = 4;
     const int num_samples = 1024;
     const int batch_size = num_samples; // Full batch training
     
@@ -22,7 +23,7 @@ int main() {
     generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
     
     // Initialize network
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, num_layers, batch_size);
     
     // Training parameters
     const int num_epochs = 10000;
@@ -79,6 +80,7 @@ int main() {
 
     // Calculate R² scores
     printf("\nR² scores:\n");
+    int last_layer = loaded_mlp->num_layers - 1;
     for (int i = 0; i < output_dim; i++) {
         float y_mean = 0.0f;
         for (int j = 0; j < num_samples; j++) {
@@ -89,7 +91,7 @@ int main() {
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            float diff_res = y[j * output_dim + i] - loaded_mlp->layer2_preact[j * output_dim + i];
+            float diff_res = y[j * output_dim + i] - loaded_mlp->layer_output[last_layer][j * output_dim + i];
             float diff_tot = y[j * output_dim + i] - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
@@ -106,7 +108,7 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = loaded_mlp->layer2_preact[j * output_dim + i];
+            float pred = loaded_mlp->layer_output[last_layer][j * output_dim + i];
             float actual = y[j * output_dim + i];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
@@ -115,7 +117,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < num_samples; j++) {
-            mae += fabs(loaded_mlp->layer2_preact[j * output_dim + i] - y[j * output_dim + i]);
+            mae += fabs(loaded_mlp->layer_output[last_layer][j * output_dim + i] - y[j * output_dim + i]);
         }
         mae /= num_samples;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
