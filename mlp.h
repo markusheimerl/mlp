@@ -9,42 +9,43 @@
 
 typedef struct {
     // Weights and gradients
-    float* W1;     // hidden_dim x input_dim
-    float* W2;     // output_dim x hidden_dim
-    float* W3;     // output_dim x input_dim
-    float* W1_grad; // hidden_dim x input_dim
-    float* W2_grad; // output_dim x hidden_dim
-    float* W3_grad; // output_dim x input_dim
+    float** W1;      // [num_layers][hidden_dim x input_dim]
+    float** W2;      // [num_layers][output_dim x hidden_dim]
+    float** W3;      // [num_layers][output_dim x input_dim]
+    float** W1_grad; // [num_layers][hidden_dim x input_dim]
+    float** W2_grad; // [num_layers][output_dim x hidden_dim]
+    float** W3_grad; // [num_layers][output_dim x input_dim]
     
     // Adam parameters
-    float* W1_m;  // First moment for W1
-    float* W1_v;  // Second moment for W1
-    float* W2_m;  // First moment for W2
-    float* W2_v;  // Second moment for W2
-    float* W3_m;  // First moment for W3
-    float* W3_v;  // Second moment for W3
-    float beta1;   // Exponential decay rate for first moment
-    float beta2;   // Exponential decay rate for second moment
-    float epsilon; // Small constant for numerical stability
-    int t;         // Time step
-    float weight_decay; // Weight decay parameter for AdamW
+    float** W1_m;    // First moment estimates for W1
+    float** W1_v;    // Second moment estimates for W1
+    float** W2_m;    // First moment estimates for W2
+    float** W2_v;    // Second moment estimates for W2
+    float** W3_m;    // First moment estimates for W3
+    float** W3_v;    // Second moment estimates for W3
+    float beta1;     // Exponential decay rate for first moment estimates
+    float beta2;     // Exponential decay rate for second moment estimates
+    float epsilon;   // Small constant for numerical stability
+    int t;           // Time step
+    float weight_decay; // Weight decay parameter for AdamW regularization
     
     // Layer outputs and working buffers
-    float* layer1_preact;   // batch_size x hidden_dim
-    float* layer1_output;   // batch_size x hidden_dim
-    float* layer2_preact;   // batch_size x output_dim
-    float* error_hidden;    // batch_size x hidden_dim
-    float* error_output;    // batch_size x output_dim
+    float** layer_preact;  // [num_layers][batch_size x hidden_dim]
+    float** layer_postact; // [num_layers][batch_size x hidden_dim]
+    float** layer_output;  // [num_layers][batch_size x output_dim]
+    float** error_hidden;  // [num_layers][batch_size x hidden_dim]
+    float** error_output;  // [num_layers][batch_size x output_dim]
     
     // Dimensions
     int input_dim;
     int hidden_dim;
     int output_dim;
+    int num_layers;
     int batch_size;
 } MLP;
 
 // Function prototypes
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size);
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int num_layers, int batch_size);
 void free_mlp(MLP* mlp);
 void forward_pass_mlp(MLP* mlp, float* X);
 float calculate_loss_mlp(MLP* mlp, float* y);
