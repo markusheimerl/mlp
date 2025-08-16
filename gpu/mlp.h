@@ -42,7 +42,7 @@ typedef struct {
     float** d_W2_grad; // [num_layers][output_dim x hidden_dim]
     float** d_W3_grad; // [num_layers][output_dim x input_dim]
     
-    // Device pointers for Adam parameters (kept as FP32 for numerical stability)
+    // Device pointers for Adam parameters
     float** d_W1_m;  // First moment for W1
     float** d_W1_v;  // Second moment for W1
     float** d_W2_m;  // First moment for W2

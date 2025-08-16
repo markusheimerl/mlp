@@ -201,8 +201,8 @@ __global__ void compute_loss_kernel(__half* predictions, __half* targets, __half
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, __half* d_X) {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    const __half alpha = __float2half(1.0f);
+    const __half beta = __float2half(0.0f);
     
     __half* input = d_X;
     
@@ -211,13 +211,14 @@ void forward_pass_mlp(MLP* mlp, __half* d_X) {
         int output_size = (layer == mlp->num_layers - 1) ? mlp->output_dim : mlp->hidden_dim;
         
         // H = XW₁
-        CHECK_CUBLAS(cublasGemmEx(mlp->cublas_handle,
-                                 CUBLAS_OP_T, CUBLAS_OP_N,
-                                 mlp->hidden_dim, mlp->batch_size, input_size,
-                                 &alpha, mlp->d_W1[layer], CUDA_R_16F, input_size,
-                                 input, CUDA_R_16F, input_size,
-                                 &beta, mlp->d_layer_preact[layer], CUDA_R_16F, mlp->hidden_dim,
-                                 CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        CHECK_CUBLAS(cublasHgemm(mlp->cublas_handle,
+                                CUBLAS_OP_T, CUBLAS_OP_N,
+                                mlp->hidden_dim, mlp->batch_size, input_size,
+                                &alpha, 
+                                mlp->d_W1[layer], input_size,
+                                input, input_size,
+                                &beta, 
+                                mlp->d_layer_preact[layer], mlp->hidden_dim));
 
         // S = Hσ(H)
         int block_size = 256;
@@ -229,22 +230,24 @@ void forward_pass_mlp(MLP* mlp, __half* d_X) {
         );
 
         // Y = SW₂
-        CHECK_CUBLAS(cublasGemmEx(mlp->cublas_handle,
-                                 CUBLAS_OP_T, CUBLAS_OP_N,
-                                 output_size, mlp->batch_size, mlp->hidden_dim,
-                                 &alpha, mlp->d_W2[layer], CUDA_R_16F, mlp->hidden_dim,
-                                 mlp->d_layer_postact[layer], CUDA_R_16F, mlp->hidden_dim,
-                                 &beta, mlp->d_layer_output[layer], CUDA_R_16F, output_size,
-                                 CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        CHECK_CUBLAS(cublasHgemm(mlp->cublas_handle,
+                                CUBLAS_OP_T, CUBLAS_OP_N,
+                                output_size, mlp->batch_size, mlp->hidden_dim,
+                                &alpha,
+                                mlp->d_W2[layer], mlp->hidden_dim,
+                                mlp->d_layer_postact[layer], mlp->hidden_dim,
+                                &beta,
+                                mlp->d_layer_output[layer], output_size));
 
         // Y = Y + XW₃
-        CHECK_CUBLAS(cublasGemmEx(mlp->cublas_handle,
-                                 CUBLAS_OP_T, CUBLAS_OP_N,
-                                 output_size, mlp->batch_size, input_size,
-                                 &alpha, mlp->d_W3[layer], CUDA_R_16F, input_size,
-                                 input, CUDA_R_16F, input_size,
-                                 &alpha, mlp->d_layer_output[layer], CUDA_R_16F, output_size,
-                                 CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        CHECK_CUBLAS(cublasHgemm(mlp->cublas_handle,
+                                CUBLAS_OP_T, CUBLAS_OP_N,
+                                output_size, mlp->batch_size, input_size,
+                                &alpha,
+                                mlp->d_W3[layer], input_size,
+                                input, input_size,
+                                &alpha,
+                                mlp->d_layer_output[layer], output_size));
         
         // Set input for next layer
         if (layer < mlp->num_layers - 1) {
