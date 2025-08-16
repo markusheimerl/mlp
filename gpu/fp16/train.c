@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include "../data.h"
+#include "../../data.h"
 #include "mlp.h"
 
 int main() {
@@ -25,12 +25,24 @@ int main() {
     float *X, *y;
     generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
 
-    // Allocate device memory for input and output and copy data
-    float *d_X, *d_y;
-    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
-    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+    // Convert synthetic data to FP16
+    __half *X_fp16, *y_fp16;
+    X_fp16 = (__half*)malloc(num_samples * input_dim * sizeof(__half));
+    y_fp16 = (__half*)malloc(num_samples * output_dim * sizeof(__half));
+    
+    for (int i = 0; i < num_samples * input_dim; i++) {
+        X_fp16[i] = __float2half(X[i]);
+    }
+    for (int i = 0; i < num_samples * output_dim; i++) {
+        y_fp16[i] = __float2half(y[i]);
+    }
+
+    // Allocate device memory for input and output and copy FP16 data
+    __half *d_X, *d_y;
+    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(__half)));
+    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(__half)));
+    CHECK_CUDA(cudaMemcpy(d_X, X_fp16, batch_size * input_dim * sizeof(__half), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y, y_fp16, batch_size * output_dim * sizeof(__half), cudaMemcpyHostToDevice));
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, num_layers, batch_size, cublas_handle);
@@ -79,17 +91,23 @@ int main() {
     // Load the model back with original batch_size
     MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle);
     
-    // Allocate host memory for predictions
+    // Allocate host memory for predictions (FP32)
     float* predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
+    __half* predictions_fp16 = (__half*)malloc(num_samples * output_dim * sizeof(__half));
 
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, d_X);
     
-    // Copy predictions from device to host (from last layer)
+    // Copy predictions from device to host (from last layer) and convert to FP32
     int last_layer = loaded_mlp->num_layers - 1;
-    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer_output[last_layer], 
-                         num_samples * output_dim * sizeof(float),
+    CHECK_CUDA(cudaMemcpy(predictions_fp16, loaded_mlp->d_layer_output[last_layer], 
+                         num_samples * output_dim * sizeof(__half),
                          cudaMemcpyDeviceToHost));
+    
+    // Convert FP16 predictions to FP32
+    for (int i = 0; i < num_samples * output_dim; i++) {
+        predictions[i] = __half2float(predictions_fp16[i]);
+    }
     
     // Calculate and print loss with loaded model
     float verification_loss = calculate_loss_mlp(loaded_mlp, d_y);
@@ -144,7 +162,10 @@ int main() {
     // Cleanup
     free(X);
     free(y);
+    free(X_fp16);
+    free(y_fp16);
     free(predictions);
+    free(predictions_fp16);
     CHECK_CUDA(cudaFree(d_X));
     CHECK_CUDA(cudaFree(d_y));
     free_mlp(mlp);

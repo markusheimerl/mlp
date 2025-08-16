@@ -12,10 +12,10 @@ train.out: mlp.o data.o train.o
 mlp.o: mlp.c mlp.h
 	$(CC) $(CFLAGS) $(CUDAFLAGS) -c mlp.c -o $@
 
-data.o: ../data.c ../data.h
-	$(CC) $(CFLAGS) $(CUDAFLAGS) -c ../data.c -o $@
+data.o: ../../data.c ../../data.h
+	$(CC) $(CFLAGS) $(CUDAFLAGS) -c ../../data.c -o $@
 
-train.o: train.c mlp.h ../data.h
+train.o: train.c mlp.h ../../data.h
 	$(CC) $(CFLAGS) $(CUDAFLAGS) -c train.c -o $@
 
 run: train.out
@@ -23,4 +23,3 @@ run: train.out
 
 clean:
 	rm -f *.out *.o *.csv *.bin
-	$(MAKE) -C fp16 clean
