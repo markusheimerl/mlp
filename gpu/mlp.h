@@ -80,7 +80,6 @@ typedef struct {
 __global__ void swish_forward_kernel_mlp(__half* output, __half* pre_activation, int size);
 __global__ void swish_backward_kernel_mlp(__half* error_hidden, __half* pre_activation, int size);
 __global__ void adamw_update_kernel_mlp(__half* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
-__global__ void compute_loss_kernel(__half* predictions, __half* targets, __half* error_output, float* loss_sum, int size);
 
 // Function prototypes
 MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int num_layers, int batch_size, cublasHandle_t cublas_handle);

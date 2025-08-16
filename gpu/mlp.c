@@ -164,41 +164,6 @@ __global__ void swish_backward_kernel_mlp(__half* error_hidden, __half* pre_acti
     }
 }
 
-// CUDA kernel to compute loss and error
-__global__ void compute_loss_kernel(__half* predictions, __half* targets, __half* error_output, float* loss_sum, int size) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // Initialize shared memory for reduction
-    __shared__ float sdata[256];
-    int tid = threadIdx.x;
-    
-    float local_loss = 0.0f;
-    
-    if (idx < size) {
-        float pred = __half2float(predictions[idx]);
-        float target = __half2float(targets[idx]);
-        float diff = pred - target;
-        error_output[idx] = __float2half(diff);
-        local_loss = diff * diff;
-    }
-    
-    sdata[tid] = local_loss;
-    __syncthreads();
-    
-    // Reduction
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] += sdata[tid + s];
-        }
-        __syncthreads();
-    }
-    
-    // Write result for this block to global memory
-    if (tid == 0) {
-        atomicAdd(loss_sum, sdata[0]);
-    }
-}
-
 // Forward pass
 void forward_pass_mlp(MLP* mlp, __half* d_X) {
     const __half alpha = __float2half(1.0f);
@@ -261,15 +226,31 @@ float calculate_loss_mlp(MLP* mlp, __half* d_y) {
     int last_layer = mlp->num_layers - 1;
     int size = mlp->batch_size * mlp->output_dim;
     
-    // Zero the loss sum
-    CHECK_CUDA(cudaMemset(mlp->d_loss_sum, 0, sizeof(float)));
+    // Copy predictions to error buffer
+    CHECK_CUBLAS(cublasCopyEx(mlp->cublas_handle, size,
+                             mlp->d_layer_output[last_layer], CUDA_R_16F, 1,
+                             mlp->d_error_output[last_layer], CUDA_R_16F, 1));
     
-    // Launch kernel to compute loss and error
-    int block_size = 256;
-    int num_blocks = (size + block_size - 1) / block_size;
-    compute_loss_kernel<<<num_blocks, block_size>>>(
-        mlp->d_layer_output[last_layer], d_y, mlp->d_error_output[last_layer], mlp->d_loss_sum, size
-    );
+    // error = predictions - targets
+    const float alpha = -1.0f;
+    CHECK_CUBLAS(cublasAxpyEx(mlp->cublas_handle, size,
+                             &alpha, CUDA_R_32F,
+                             d_y, CUDA_R_16F, 1,
+                             mlp->d_error_output[last_layer], CUDA_R_16F, 1,
+                             CUDA_R_32F));
+    
+    // loss = error^T * error
+    const float one = 1.0f;
+    const float zero = 0.0f;
+    CHECK_CUBLAS(cublasGemmEx(mlp->cublas_handle,
+                             CUBLAS_OP_T, CUBLAS_OP_N,
+                             1, 1, size,
+                             &one,
+                             mlp->d_error_output[last_layer], CUDA_R_16F, size,
+                             mlp->d_error_output[last_layer], CUDA_R_16F, size,
+                             &zero,
+                             mlp->d_loss_sum, CUDA_R_32F, 1,
+                             CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
     
     // Copy loss back to host
     float loss;
