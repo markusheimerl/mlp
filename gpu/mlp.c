@@ -83,7 +83,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int num_layers, int
         CHECK_CUDA(cudaMalloc(&mlp->d_W2_grad[layer], w2_size * sizeof(float)));
         CHECK_CUDA(cudaMalloc(&mlp->d_W3_grad[layer], w3_size * sizeof(float)));
         
-        // Allocate device memory for Adam parameters (FP32)
+        // Allocate device memory for Adam parameters
         CHECK_CUDA(cudaMalloc(&mlp->d_W1_m[layer], w1_size * sizeof(float)));
         CHECK_CUDA(cudaMalloc(&mlp->d_W1_v[layer], w1_size * sizeof(float)));
         CHECK_CUDA(cudaMalloc(&mlp->d_W2_m[layer], w2_size * sizeof(float)));
@@ -148,8 +148,8 @@ void free_mlp(MLP* mlp) {
 __global__ void swish_forward_kernel_mlp(__half* output, __half* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        float h = __half2float(pre_activation[idx]);
-        output[idx] = __float2half(h / (1.0f + expf(-h)));
+        __half h = pre_activation[idx];
+        output[idx] = __hdiv(h, __hadd(__float2half(1.0f), hexp(__hneg(h))));
     }
 }
 
@@ -157,10 +157,11 @@ __global__ void swish_forward_kernel_mlp(__half* output, __half* pre_activation,
 __global__ void swish_backward_kernel_mlp(__half* error_hidden, __half* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        float h = __half2float(pre_activation[idx]);
-        float err = __half2float(error_hidden[idx]);
-        float sigmoid = 1.0f / (1.0f + expf(-h));
-        error_hidden[idx] = __float2half(err * (sigmoid + h * sigmoid * (1.0f - sigmoid)));
+        __half h = pre_activation[idx];
+        __half err = error_hidden[idx];
+        __half sigmoid = __hdiv(__float2half(1.0f), __hadd(__float2half(1.0f), hexp(__hneg(h))));
+        __half derivative = __hadd(sigmoid, __hmul(__hmul(h, sigmoid), __hsub(__float2half(1.0f), sigmoid)));
+        error_hidden[idx] = __hmul(err, derivative);
     }
 }
 
@@ -430,7 +431,7 @@ void save_mlp(MLP* mlp, const char* filename) {
     fwrite(&mlp->num_layers, sizeof(int), 1, file);
     fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
-    // Save weights for each layer (directly as FP16)
+    // Save weights for each layer
     for (int layer = 0; layer < mlp->num_layers; layer++) {
         int input_size = (layer == 0) ? mlp->input_dim : mlp->hidden_dim;
         int output_size = (layer == mlp->num_layers - 1) ? mlp->output_dim : mlp->hidden_dim;
@@ -456,7 +457,7 @@ void save_mlp(MLP* mlp, const char* filename) {
         free(h_W1); free(h_W2); free(h_W3);
     }
     
-    // Save Adam state (FP32)
+    // Save Adam state
     fwrite(&mlp->t, sizeof(int), 1, file);
     for (int layer = 0; layer < mlp->num_layers; layer++) {
         int input_size = (layer == 0) ? mlp->input_dim : mlp->hidden_dim;
@@ -515,7 +516,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas
     int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, num_layers, batch_size, cublas_handle);
     
-    // Load weights for each layer (directly as FP16)
+    // Load weights for each layer
     for (int layer = 0; layer < num_layers; layer++) {
         int input_size = (layer == 0) ? input_dim : hidden_dim;
         int output_size = (layer == num_layers - 1) ? output_dim : hidden_dim;
@@ -539,7 +540,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas
         free(h_W1); free(h_W2); free(h_W3);
     }
     
-    // Load Adam state (FP32)
+    // Load Adam state
     fread(&mlp->t, sizeof(int), 1, file);
     for (int layer = 0; layer < num_layers; layer++) {
         int input_size = (layer == 0) ? input_dim : hidden_dim;
