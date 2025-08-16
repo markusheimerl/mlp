@@ -7,6 +7,7 @@
 #include <math.h>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+#include <cuda_fp16.h>
 
 // CUDA Error checking macro
 #ifndef CHECK_CUDA
@@ -34,14 +35,14 @@
 
 typedef struct {
     // Device pointers for weights and gradients
-    float** d_W1;     // [num_layers][hidden_dim x input_dim]
-    float** d_W2;     // [num_layers][output_dim x hidden_dim]
-    float** d_W3;     // [num_layers][output_dim x input_dim]
+    __half** d_W1;     // [num_layers][hidden_dim x input_dim]
+    __half** d_W2;     // [num_layers][output_dim x hidden_dim]
+    __half** d_W3;     // [num_layers][output_dim x input_dim]
     float** d_W1_grad; // [num_layers][hidden_dim x input_dim]
     float** d_W2_grad; // [num_layers][output_dim x hidden_dim]
     float** d_W3_grad; // [num_layers][output_dim x input_dim]
     
-    // Device pointers for Adam parameters
+    // Device pointers for Adam parameters (kept as FP32 for numerical stability)
     float** d_W1_m;  // First moment for W1
     float** d_W1_v;  // Second moment for W1
     float** d_W2_m;  // First moment for W2
@@ -55,11 +56,14 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Device pointers for layer outputs and working buffers
-    float** d_layer_preact;   // [num_layers][batch_size x hidden_dim]
-    float** d_layer_postact;  // [num_layers][batch_size x hidden_dim]
-    float** d_layer_output;   // [num_layers][batch_size x output_dim]
-    float** d_error_hidden;   // [num_layers][batch_size x hidden_dim]
-    float** d_error_output;   // [num_layers][batch_size x output_dim]
+    __half** d_layer_preact;   // [num_layers][batch_size x hidden_dim]
+    __half** d_layer_postact;  // [num_layers][batch_size x hidden_dim]
+    __half** d_layer_output;   // [num_layers][batch_size x output_dim]
+    __half** d_error_hidden;   // [num_layers][batch_size x hidden_dim]
+    __half** d_error_output;   // [num_layers][batch_size x output_dim]
+
+    // Device memory for loss computation
+    float* d_loss_sum;
 
     // cuBLAS handle
     cublasHandle_t cublas_handle;
@@ -73,17 +77,18 @@ typedef struct {
 } MLP;
 
 // CUDA kernel prototypes
-__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
-__global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
-__global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
+__global__ void swish_forward_kernel_mlp(__half* output, __half* pre_activation, int size);
+__global__ void swish_backward_kernel_mlp(__half* error_hidden, __half* pre_activation, int size);
+__global__ void adamw_update_kernel_mlp(__half* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
+__global__ void compute_loss_kernel(__half* predictions, __half* targets, __half* error_output, float* loss_sum, int size);
 
 // Function prototypes
 MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int num_layers, int batch_size, cublasHandle_t cublas_handle);
 void free_mlp(MLP* mlp);
-void forward_pass_mlp(MLP* mlp, float* d_X);
-float calculate_loss_mlp(MLP* mlp, float* d_y);
+void forward_pass_mlp(MLP* mlp, __half* d_X);
+float calculate_loss_mlp(MLP* mlp, __half* d_y);
 void zero_gradients_mlp(MLP* mlp);
-void backward_pass_mlp(MLP* mlp, float* d_X);
+void backward_pass_mlp(MLP* mlp, __half* d_X);
 void update_weights_mlp(MLP* mlp, float learning_rate);
 void save_mlp(MLP* mlp, const char* filename);
 MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle);
