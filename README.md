@@ -1,7 +1,7 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a standard feed-forward network operating on batched inputs of shape (batch_size × input_dim). The architecture consists of two linear transformations with an intermediate swish activation and a learned residual connection, where the forward propagation follows:
+Consider a multilayer perceptron operating on batched inputs of shape (batch_size × input_dim). The architecture consists of multiple layers, each performing two linear transformations with an intermediate swish activation and a learned residual connection. For each layer, the forward propagation follows:
 
 $$
 \begin{align*}
@@ -11,7 +11,7 @@ Y &= SW_2 + XW_3
 \end{align*}
 $$
 
-The input transformation matrix $W_1$ maps input features to hidden representations, the output projection matrix $W_2$ transforms activated hidden states to outputs, and the residual matrix $W_3$ provides direct input-output connections. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
+The input transformation matrix $W_1$ maps input features to hidden representations, the output projection matrix $W_2$ transforms activated hidden states to outputs, and the residual matrix $W_3$ provides direct input-output connections. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass for each layer through the chain rule, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
