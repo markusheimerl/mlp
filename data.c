@@ -1,184 +1,194 @@
 #include "data.h"
 
-static float evaluate_synthetic_function(int num_terms, const float* coefficients, const int* operations,
-                              const int* idx1, const int* idx2, const int* add_subtract, const float* x) {
+static const char* basis_names[] = {
+    "sin", "cos", "tanh", "exp", "log", "poly", "sinh", "sinprod", "max", "min", "copy"
+};
+
+static float basis(int op, float x, float y) {
+    switch (op % 11) {
+        case 0: return sinf(2.0f * x);
+        case 1: return cosf(1.5f * x);
+        case 2: return tanhf(x + y);
+        case 3: return expf(-x * x);
+        case 4: return logf(fabsf(x) + 1.0f);
+        case 5: return x * x * y;
+        case 6: return sinhf(x - y);
+        case 7: return x * sinf(M_PI * y);
+        case 8: return fmaxf(x, y);  // max of two inputs
+        case 9: return fminf(x, y);  // min of two inputs
+        case 10: return x;           // copy first input
+    }
+    return 0.0f;
+}
+
+static void print_term(float coeff, int op, int idx1, int idx2, int offset1, int offset2, int sign, int max_offset, int first_term) {
+    if (!first_term) {
+        printf(sign ? " - " : " + ");
+    } else if (sign) {
+        printf("-");
+    }
+    
+    if (fabsf(coeff - 1.0f) > 1e-6) printf("%.3f*", coeff);
+    
+    const char* op_name = basis_names[op % 11];
+    
+    if (op % 11 == 10) {
+        // Copy - single input
+        if (max_offset == 0 || offset1 == 0) {
+            printf("x%d", idx1);
+        } else {
+            printf("x%d[t%+d]", idx1, max_offset > 0 ? -offset1 : offset1);
+        }
+    } else {
+        // Two-input functions
+        printf("%s(", op_name);
+        
+        if (max_offset == 0 || offset1 == 0) {
+            printf("x%d", idx1);
+        } else {
+            printf("x%d[t%+d]", idx1, max_offset > 0 ? -offset1 : offset1);
+        }
+        
+        printf(",");
+        
+        if (max_offset == 0 || offset2 == 0) {
+            printf("x%d", idx2);
+        } else {
+            printf("x%d[t%+d]", idx2, max_offset > 0 ? -offset2 : offset2);
+        }
+        
+        printf(")");
+    }
+}
+
+static void print_function(int output_idx, const float* params, int n_terms, int max_offset) {
+    printf("y%d =", output_idx);
+    
+    for (int i = 0; i < n_terms; i++) {
+        int base = i * 7;
+        float coeff = params[base];
+        int op = (int)params[base + 1];
+        int idx1 = (int)params[base + 2];
+        int idx2 = (int)params[base + 3];
+        int offset1 = (int)params[base + 4];
+        int offset2 = (int)params[base + 5];
+        int sign = (int)params[base + 6] % 2;
+        
+        print_term(coeff, op, idx1, idx2, offset1, offset2, sign, max_offset, i == 0);
+    }
+    printf("\n");
+}
+
+static float eval_function(const float* params, int n_terms, const float* X, 
+                          int sample, int t, int input_dim, int seq_len, int max_offset) {
     float result = 0.0f;
     
-    for (int i = 0; i < num_terms; i++) {
-        float coefficient = coefficients[i];
-        int operation = operations[i];
-        int input_idx1 = idx1[i];
-        int input_idx2 = idx2[i];
-        int add_sub = add_subtract[i];
+    for (int i = 0; i < n_terms; i++) {
+        int base = i * 7;
+        float coeff = params[base];
+        int op = (int)params[base + 1];
+        int idx1 = (int)params[base + 2] % input_dim;
+        int idx2 = (int)params[base + 3] % input_dim;
+        int offset1 = (int)params[base + 4];
+        int offset2 = (int)params[base + 5];
+        int sign = (int)params[base + 6] % 2;
         
-        float term_value = 0.0f;
+        // Get effective time indices
+        int eff_t1 = max_offset > 0 ? fmaxf(0, t - offset1) : 
+                     max_offset < 0 ? fmaxf(0, fminf(seq_len - 1, t + offset1)) : t;
+        int eff_t2 = max_offset > 0 ? fmaxf(0, t - offset2) : 
+                     max_offset < 0 ? fmaxf(0, fminf(seq_len - 1, t + offset2)) : t;
         
-        switch (operation) {
-            case 0: term_value = coefficient * sinf(x[input_idx1] * 2.0f); break;
-            case 1: term_value = coefficient * cosf(x[input_idx1] * 1.5f); break;
-            case 2: term_value = coefficient * tanhf(x[input_idx1] + x[input_idx2]); break;
-            case 3: term_value = coefficient * expf(-powf(x[input_idx1], 2)); break;
-            case 4: term_value = coefficient * logf(fabsf(x[input_idx1]) + 1.0f); break;
-            case 5: term_value = coefficient * powf(x[input_idx1], 2) * x[input_idx2]; break;
-            case 6: term_value = coefficient * sinhf(x[input_idx1] * x[input_idx2]); break;
-            case 7: term_value = coefficient * x[input_idx1] * sinf(x[input_idx2] * M_PI); break;
-        }
+        if (eff_t1 >= seq_len || eff_t2 >= seq_len || eff_t1 < 0 || eff_t2 < 0) continue;
         
-        if (add_sub == 0) {
-            result += term_value;
-        } else {
-            result -= term_value;
-        }
+        // Extract values from temporal pool
+        int base_idx1 = sample * seq_len * input_dim + eff_t1 * input_dim;
+        int base_idx2 = sample * seq_len * input_dim + eff_t2 * input_dim;
+        float x = X[base_idx1 + idx1];
+        float y = X[base_idx2 + idx2];
+        
+        float term = coeff * basis(op, x, y);
+        result += sign ? -term : term;
     }
     
     return result;
 }
 
-static void print_symbolic_function(int output_idx, int num_terms, const float* coefficients, 
-                                  const int* operations, const int* idx1, const int* idx2, 
-                                  const int* add_subtract) {
-    printf("y%d = ", output_idx);
+void generate_data(float** X, float** y, int num_samples, int seq_len, int input_dim, int output_dim,
+                   float range_min, float range_max, int max_offset) {
+    int total_x = num_samples * seq_len * input_dim;
+    int total_y = num_samples * seq_len * output_dim;
     
-    for (int i = 0; i < num_terms; i++) {
-        float coeff = coefficients[i];
-        int op = operations[i];
-        int in1 = idx1[i];
-        int in2 = idx2[i];
-        int add_sub = add_subtract[i];
-        
-        // Print sign
-        if (i == 0) {
-            if (add_sub == 1) printf("-");
-        } else {
-            printf(" %s ", (add_sub == 0) ? "+" : "-");
-        }
-        
-        // Print coefficient if not 1.0
-        if (fabsf(coeff - 1.0f) > 1e-6) {
-            printf("%.3f*", coeff);
-        }
-        
-        // Print operation
-        switch (op) {
-            case 0: printf("sin(2*x%d)", in1); break;
-            case 1: printf("cos(1.5*x%d)", in1); break;
-            case 2: printf("tanh(x%d + x%d)", in1, in2); break;
-            case 3: printf("exp(-x%d^2)", in1); break;
-            case 4: printf("log(|x%d| + 1)", in1); break;
-            case 5: printf("x%d^2*x%d", in1, in2); break;
-            case 6: printf("sinh(x%d*x%d)", in1, in2); break;
-            case 7: printf("x%d*sin(π*x%d)", in1, in2); break;
-        }
-    }
-    printf("\n");
-}
-
-void generate_synthetic_data(float** X, float** y, int num_samples, int input_dim, int output_dim, 
-                           float input_min, float input_max) {
-    // Allocate memory
-    *X = (float*)malloc(num_samples * input_dim * sizeof(float));
-    *y = (float*)malloc(num_samples * output_dim * sizeof(float));
+    *X = (float*)malloc(total_x * sizeof(float));
+    *y = (float*)malloc(total_y * sizeof(float));
     
-    // Generate random input data
-    for (int i = 0; i < num_samples * input_dim; i++) {
-        float rand_val = (float)rand() / (float)RAND_MAX;
-        (*X)[i] = input_min + rand_val * (input_max - input_min);
+    // Generate input data
+    for (int i = 0; i < total_x; i++) {
+        (*X)[i] = range_min + ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
     }
     
-    // Create function parameters for each output dimension
-    int* num_terms_per_output = (int*)malloc(output_dim * sizeof(int));
-    float** coefficients = (float**)malloc(output_dim * sizeof(float*));
-    int** operations = (int**)malloc(output_dim * sizeof(int*));
-    int** idx1 = (int**)malloc(output_dim * sizeof(int*));
-    int** idx2 = (int**)malloc(output_dim * sizeof(int*));
-    int** add_subtract = (int**)malloc(output_dim * sizeof(int*));
+    // Generate function parameters for each output
+    const int n_terms = 6 + rand() % 7; // 6-12 terms per function
+    const int params_per_term = 7;
+    float* all_params = (float*)malloc(output_dim * n_terms * params_per_term * sizeof(float));
     
-    for (int output_idx = 0; output_idx < output_dim; output_idx++) {
-        // Random number of terms between 6 and 12
-        int num_terms = 6 + (rand() % 7);
-        num_terms_per_output[output_idx] = num_terms;
-        
-        // Allocate arrays for this function's terms
-        coefficients[output_idx] = (float*)malloc(num_terms * sizeof(float));
-        operations[output_idx] = (int*)malloc(num_terms * sizeof(int));
-        idx1[output_idx] = (int*)malloc(num_terms * sizeof(int));
-        idx2[output_idx] = (int*)malloc(num_terms * sizeof(int));
-        add_subtract[output_idx] = (int*)malloc(num_terms * sizeof(int));
-
-        // Generate random terms
-        for (int term = 0; term < num_terms; term++) {
-            coefficients[output_idx][term] = 0.1f + 0.4f * ((float)rand() / (float)RAND_MAX);
-            operations[output_idx][term] = rand() % 8;
-            idx1[output_idx][term] = rand() % input_dim;
-            idx2[output_idx][term] = rand() % input_dim;
-            add_subtract[output_idx][term] = rand() % 2;
+    for (int out = 0; out < output_dim; out++) {
+        for (int term = 0; term < n_terms; term++) {
+            int base = (out * n_terms + term) * params_per_term;
+            all_params[base + 0] = 0.1f + 0.4f * ((float)rand() / (float)RAND_MAX); // coefficient
+            all_params[base + 1] = (float)(rand() % 11);                      // operation
+            all_params[base + 2] = (float)(rand() % input_dim);               // input idx 1
+            all_params[base + 3] = (float)(rand() % input_dim);               // input idx 2
+            all_params[base + 4] = (float)(rand() % (abs(max_offset) + 1));   // time offset 1
+            all_params[base + 5] = (float)(rand() % (abs(max_offset) + 1));   // time offset 2
+            all_params[base + 6] = (float)(rand() % 2);                       // add/subtract
         }
     }
     
-    // Print symbolic representation of generated functions
+    // Print generated functions
     printf("\nGenerated synthetic functions:\n");
-    for (int output_idx = 0; output_idx < output_dim; output_idx++) {
-        print_symbolic_function(output_idx, num_terms_per_output[output_idx], 
-                              coefficients[output_idx], operations[output_idx], 
-                              idx1[output_idx], idx2[output_idx], add_subtract[output_idx]);
+    for (int out = 0; out < output_dim; out++) {
+        float* params = &all_params[out * n_terms * params_per_term];
+        print_function(out, params, n_terms, max_offset);
     }
     printf("\n");
     
-    // Generate output data by evaluating each function
-    for (int i = 0; i < num_samples; i++) {
-        for (int j = 0; j < output_dim; j++) {
-            (*y)[i * output_dim + j] = evaluate_synthetic_function(num_terms_per_output[j], 
-                                                        coefficients[j], operations[j], 
-                                                        idx1[j], idx2[j], add_subtract[j], 
-                                                        &(*X)[i * input_dim]);
+    // Generate outputs
+    for (int sample = 0; sample < num_samples; sample++) {
+        for (int t = 0; t < seq_len; t++) {
+            for (int out = 0; out < output_dim; out++) {
+                int y_idx = sample * seq_len * output_dim + t * output_dim + out;
+                float* params = &all_params[out * n_terms * params_per_term];
+                (*y)[y_idx] = eval_function(params, n_terms, *X, sample, t, input_dim, seq_len, max_offset);
+            }
         }
     }
     
-    // Clean up
-    for (int i = 0; i < output_dim; i++) {
-        free(coefficients[i]);
-        free(operations[i]);
-        free(idx1[i]);
-        free(idx2[i]);
-        free(add_subtract[i]);
-    }
-    free(num_terms_per_output);
-    free(coefficients);
-    free(operations);
-    free(idx1);
-    free(idx2);
-    free(add_subtract);
+    free(all_params);
 }
 
-void save_data(float* X, float* y, int num_samples, int input_dim, int output_dim, const char* filename) {
-    FILE* file = fopen(filename, "w");
-    if (!file) {
-        printf("Error opening file for writing: %s\n", filename);
-        return;
-    }
+void save_data(float* X, float* y, int num_samples, int seq_len, int input_dim, int output_dim,
+               const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) { printf("Error: cannot write %s\n", filename); return; }
     
-    // Write header
-    for (int i = 0; i < input_dim; i++) {
-        fprintf(file, "x%d,", i);
-    }
-    for (int i = 0; i < output_dim - 1; i++) {
-        fprintf(file, "y%d,", i);
-    }
-    fprintf(file, "y%d\n", output_dim - 1);
+    // Header
+    for (int i = 0; i < input_dim; i++) fprintf(f, "x%d,", i);
+    for (int i = 0; i < output_dim; i++) fprintf(f, "y%d%s", i, i == output_dim-1 ? "\n" : ",");
     
-    // Write data
-    for (int i = 0; i < num_samples; i++) {
-        // Input features
-        for (int j = 0; j < input_dim; j++) {
-            fprintf(file, "%.17f,", X[i * input_dim + j]);
+    // Data
+    for (int s = 0; s < num_samples; s++) {
+        for (int t = 0; t < seq_len; t++) {
+            int x_base = s * seq_len * input_dim + t * input_dim;
+            int y_base = s * seq_len * output_dim + t * output_dim;
+            
+            for (int i = 0; i < input_dim; i++) fprintf(f, "%.6f,", X[x_base + i]);
+            for (int i = 0; i < output_dim; i++) 
+                fprintf(f, "%.6f%s", y[y_base + i], i == output_dim-1 ? "\n" : ",");
         }
-        // Output values
-        for (int j = 0; j < output_dim - 1; j++) {
-            fprintf(file, "%.17f,", y[i * output_dim + j]);
-        }
-        fprintf(file, "%.17f\n", y[i * output_dim + output_dim - 1]);
+        if (s < num_samples-1 && seq_len > 1) fprintf(f, "\n");
     }
     
-    fclose(file);
+    fclose(f);
     printf("Data saved to %s\n", filename);
 }

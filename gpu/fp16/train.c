@@ -23,7 +23,7 @@ int main() {
     
     // Generate synthetic data
     float *X, *y;
-    generate_synthetic_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
+    generate_data(&X, &y, num_samples, 1, input_dim, output_dim, -3.0f, 3.0f, 0);
 
     // Convert synthetic data to FP16
     __half *X_fp16, *y_fp16;
@@ -83,7 +83,7 @@ int main() {
 
     // Save model and data with timestamped filenames
     save_mlp(mlp, model_fname);
-    save_data(X, y, num_samples, input_dim, output_dim, data_fname);
+    save_data(X, y, num_samples, 1, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
