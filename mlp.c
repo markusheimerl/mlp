@@ -267,7 +267,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
             mlp->W1_v[layer][i] = mlp->beta2 * mlp->W1_v[layer][i] + (1.0f - mlp->beta2) * grad * grad;
             
             float update = alpha_t * mlp->W1_m[layer][i] / (sqrtf(mlp->W1_v[layer][i]) + mlp->epsilon);
-            // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
+            // W = (1-λη)W - η(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
             mlp->W1[layer][i] = mlp->W1[layer][i] * (1.0f - learning_rate * mlp->weight_decay) - update;
         }
         
@@ -281,7 +281,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
             mlp->W2_v[layer][i] = mlp->beta2 * mlp->W2_v[layer][i] + (1.0f - mlp->beta2) * grad * grad;
             
             float update = alpha_t * mlp->W2_m[layer][i] / (sqrtf(mlp->W2_v[layer][i]) + mlp->epsilon);
-            // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
+            // W = (1-λη)W - η(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
             mlp->W2[layer][i] = mlp->W2[layer][i] * (1.0f - learning_rate * mlp->weight_decay) - update;
         }
         
@@ -295,7 +295,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
             mlp->W3_v[layer][i] = mlp->beta2 * mlp->W3_v[layer][i] + (1.0f - mlp->beta2) * grad * grad;
             
             float update = alpha_t * mlp->W3_m[layer][i] / (sqrtf(mlp->W3_v[layer][i]) + mlp->epsilon);
-            // W = (1-λη)W - η·(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
+            // W = (1-λη)W - η(m/(1-β₁ᵗ))/√(v/(1-β₂ᵗ) + ε)
             mlp->W3[layer][i] = mlp->W3[layer][i] * (1.0f - learning_rate * mlp->weight_decay) - update;
         }
     }
