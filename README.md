@@ -1,23 +1,22 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a multilayer perceptron operating on batched inputs of shape (batch_size × input_dim). The architecture consists of multiple layers, each performing two linear transformations with an intermediate swish activation and a learned residual connection. For each layer, the forward propagation follows:
+Consider a multilayer perceptron operating on batched inputs of shape (batch_size × input_dim). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows:
 
 $$
 \begin{align*}
 H &= XW_1 \\
 S &= H\sigma(H) \\
-Y &= SW_2 + XW_3
+Y &= SW_2
 \end{align*}
 $$
 
-The input transformation matrix $W_1$ maps input features to hidden representations, the output projection matrix $W_2$ transforms activated hidden states to outputs, and the residual matrix $W_3$ provides direct input-output connections. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass for each layer through the chain rule, where $\odot$ denotes elementwise multiplication:
+The input transformation matrix $W_1$ maps input features to hidden representations, and the output projection matrix $W_2$ transforms activated hidden states to outputs. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
 \frac{\partial L}{\partial Y} &= Y - Y_{\text{true}} \\
 \frac{\partial L}{\partial W_2} &= S^\top(\frac{\partial L}{\partial Y}) \\
-\frac{\partial L}{\partial W_3} &= X^\top(\frac{\partial L}{\partial Y}) \\
 \frac{\partial L}{\partial S} &= (\frac{\partial L}{\partial Y})(W_2)^\top \\
 \frac{\partial L}{\partial H} &= \frac{\partial L}{\partial S} \odot [\sigma(H) + H\sigma(H)(1-\sigma(H))] \\
 \frac{\partial L}{\partial W_1} &= X^\top(\frac{\partial L}{\partial H})

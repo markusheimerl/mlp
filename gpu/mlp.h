@@ -34,32 +34,30 @@
 
 typedef struct {
     // Device pointers for weights and gradients
-    float** d_W1;     // [num_layers][hidden_dim x input_dim]
-    float** d_W2;     // [num_layers][output_dim x hidden_dim]
-    float** d_W3;     // [num_layers][output_dim x input_dim]
-    float** d_W1_grad; // [num_layers][hidden_dim x input_dim]
-    float** d_W2_grad; // [num_layers][output_dim x hidden_dim]
-    float** d_W3_grad; // [num_layers][output_dim x input_dim]
+    float* d_W1;      // [hidden_dim x input_dim]
+    float* d_W2;      // [output_dim x hidden_dim]
+    float* d_W1_grad; // [hidden_dim x input_dim]
+    float* d_W2_grad; // [output_dim x hidden_dim]
     
     // Device pointers for Adam parameters
-    float** d_W1_m;  // First moment for W1
-    float** d_W1_v;  // Second moment for W1
-    float** d_W2_m;  // First moment for W2
-    float** d_W2_v;  // Second moment for W2
-    float** d_W3_m;  // First moment for W3
-    float** d_W3_v;  // Second moment for W3
-    float beta1;    // Exponential decay rate for first moment
-    float beta2;    // Exponential decay rate for second moment
-    float epsilon;  // Small constant for numerical stability
-    int t;          // Time step
+    float* d_W1_m;    // First moment for W1
+    float* d_W1_v;    // Second moment for W1
+    float* d_W2_m;    // First moment for W2
+    float* d_W2_v;    // Second moment for W2
+    float beta1;      // Exponential decay rate for first moment
+    float beta2;      // Exponential decay rate for second moment
+    float epsilon;    // Small constant for numerical stability
+    int t;            // Time step
     float weight_decay; // Weight decay parameter for AdamW
     
-    // Device pointers for layer outputs and working buffers
-    float** d_layer_preact;   // [num_layers][batch_size x hidden_dim]
-    float** d_layer_postact;  // [num_layers][batch_size x hidden_dim]
-    float** d_layer_output;   // [num_layers][batch_size x output_dim]
-    float** d_error_hidden;   // [num_layers][batch_size x hidden_dim]
-    float** d_error_output;   // [num_layers][batch_size x output_dim]
+    // Device pointers for forward pass buffers
+    float* d_layer_preact;  // [batch_size x hidden_dim]
+    float* d_layer_postact; // [batch_size x hidden_dim]
+    float* d_layer_output;  // [batch_size x output_dim]
+    
+    // Device pointers for backward pass buffers
+    float* d_error_hidden;  // [batch_size x hidden_dim]
+    float* d_error_output;  // [batch_size x output_dim]
 
     // cuBLAS handle
     cublasHandle_t cublas_handle;
@@ -68,7 +66,6 @@ typedef struct {
     int input_dim;
     int hidden_dim;
     int output_dim;
-    int num_layers;
     int batch_size;
 } MLP;
 
@@ -78,7 +75,7 @@ __global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activa
 __global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
 
 // Function prototypes
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int num_layers, int batch_size, cublasHandle_t cublas_handle);
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle);
 void free_mlp(MLP* mlp);
 void forward_pass_mlp(MLP* mlp, float* d_X);
 float calculate_loss_mlp(MLP* mlp, float* d_y);
