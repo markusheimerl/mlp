@@ -22,7 +22,7 @@ int main() {
     
     // Generate synthetic data
     float *X, *y;
-    generate_data(&X, &y, num_samples, 1, input_dim, output_dim, -3.0f, 3.0f, 0);
+    generate_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
 
     // Allocate device memory for input and output and copy data
     float *d_X, *d_y;
@@ -70,7 +70,7 @@ int main() {
 
     // Save model and data with timestamped filenames
     save_mlp(mlp, model_fname);
-    save_data(X, y, num_samples, 1, input_dim, output_dim, data_fname);
+    save_data(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
