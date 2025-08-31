@@ -8,14 +8,20 @@ void generate_data(float** X, float** y, int num_samples, int input_dim, int out
     *X = (float*)malloc(total_x * sizeof(float));
     *y = (float*)malloc(total_y * sizeof(float));
     
-    // Generate completely random input data
-    for (int i = 0; i < total_x; i++) {
-        (*X)[i] = range_min + ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
+    // Generate data in column-major format: [input_dim × num_samples]
+    for (int sample = 0; sample < num_samples; sample++) {
+        for (int feature = 0; feature < input_dim; feature++) {
+            (*X)[feature * num_samples + sample] = range_min + 
+                ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
+        }
     }
     
-    // Generate completely random output data
-    for (int i = 0; i < total_y; i++) {
-        (*y)[i] = range_min + ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
+    // Generate output data in column-major format: [output_dim × num_samples]
+    for (int sample = 0; sample < num_samples; sample++) {
+        for (int out = 0; out < output_dim; out++) {
+            (*y)[out * num_samples + sample] = range_min + 
+                ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
+        }
     }
     
     printf("Generated random data: %d samples, %d inputs, %d outputs\n", 
@@ -41,10 +47,10 @@ void save_data(float* X, float* y, int num_samples, int input_dim, int output_di
     // Data
     for (int s = 0; s < num_samples; s++) {
         for (int i = 0; i < input_dim; i++) {
-            fprintf(f, "%.6f,", X[s * input_dim + i]);
+            fprintf(f, "%.6f,", X[i * num_samples + s]);
         }
         for (int i = 0; i < output_dim; i++) {
-            fprintf(f, "%.6f%s", y[s * output_dim + i], i == output_dim-1 ? "\n" : ",");
+            fprintf(f, "%.6f%s", y[i * num_samples + s], i == output_dim-1 ? "\n" : ",");
         }
     }
     

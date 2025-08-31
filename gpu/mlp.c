@@ -115,11 +115,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
     
-    // H = XW₁
+    // H = W₁X
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
-                            &alpha, mlp->d_W1, mlp->input_dim,
+                            &alpha, mlp->d_W1, mlp->hidden_dim,
                             d_X, mlp->input_dim,
                             &beta, mlp->d_layer_preact, mlp->hidden_dim));
 
@@ -132,11 +132,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // Y = SW₂
+    // Y = W₂S
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T, CUBLAS_OP_N,
+                            CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
-                            &alpha, mlp->d_W2, mlp->hidden_dim,
+                            &alpha, mlp->d_W2, mlp->output_dim,
                             mlp->d_layer_postact, mlp->hidden_dim,
                             &beta, mlp->d_layer_output, mlp->output_dim));
 }
@@ -174,19 +174,19 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
+    // ∂L/∂W₂ = (∂L/∂Y)Sᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
-                            mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
-                            &alpha, mlp->d_layer_postact, mlp->hidden_dim,
-                            mlp->d_error_output, mlp->output_dim,
-                            &alpha, mlp->d_W2_grad, mlp->hidden_dim));
+                            mlp->output_dim, mlp->hidden_dim, mlp->batch_size,
+                            &alpha, mlp->d_error_output, mlp->output_dim,
+                            mlp->d_layer_postact, mlp->hidden_dim,
+                            &alpha, mlp->d_W2_grad, mlp->output_dim));
 
-    // ∂L/∂S = (∂L/∂Y)W₂ᵀ
+    // ∂L/∂S = W₂ᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
+                            CUBLAS_OP_T, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
-                            &alpha, mlp->d_W2, mlp->hidden_dim,
+                            &alpha, mlp->d_W2, mlp->output_dim,
                             mlp->d_error_output, mlp->output_dim,
                             &beta, mlp->d_error_hidden, mlp->hidden_dim));
 
@@ -199,20 +199,20 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
+    // ∂L/∂W₁ = (∂L/∂H)Xᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
-                            mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
-                            &alpha, d_X, mlp->input_dim,
-                            mlp->d_error_hidden, mlp->hidden_dim,
-                            &alpha, mlp->d_W1_grad, mlp->input_dim));
+                            mlp->hidden_dim, mlp->input_dim, mlp->batch_size,
+                            &alpha, mlp->d_error_hidden, mlp->hidden_dim,
+                            d_X, mlp->input_dim,
+                            &alpha, mlp->d_W1_grad, mlp->hidden_dim));
     
     if (d_grad_X != NULL) {
-        // ∂L/∂X = (∂L/∂H)W₁ᵀ
+        // ∂L/∂X = W₁ᵀ(∂L/∂H)
         CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                                CUBLAS_OP_N, CUBLAS_OP_N,
+                                CUBLAS_OP_T, CUBLAS_OP_N,
                                 mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
-                                &alpha, mlp->d_W1, mlp->input_dim,
+                                &alpha, mlp->d_W1, mlp->hidden_dim,
                                 mlp->d_error_hidden, mlp->hidden_dim,
                                 &beta, d_grad_X, mlp->input_dim));
     }

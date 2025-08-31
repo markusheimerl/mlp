@@ -24,11 +24,6 @@ int main() {
     float *X, *y;
     generate_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
 
-    // Allocate device memory for batches
-    float *d_X, *d_y;
-    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
-    
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
     
@@ -37,6 +32,14 @@ int main() {
     const float learning_rate = 0.0003f;
     const int num_batches = num_samples / batch_size;
     
+    // Allocate batch buffers
+    float* X_batch = (float*)malloc(batch_size * input_dim * sizeof(float));
+    float* y_batch = (float*)malloc(batch_size * output_dim * sizeof(float));
+    
+    float *d_X, *d_y;
+    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
+    
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
         float epoch_loss = 0.0f;
@@ -44,11 +47,22 @@ int main() {
         for (int batch = 0; batch < num_batches; batch++) {
             int start_idx = batch * batch_size;
             
-            // Copy batch data to device
-            CHECK_CUDA(cudaMemcpy(d_X, &X[start_idx * input_dim], 
-                                 batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
-            CHECK_CUDA(cudaMemcpy(d_y, &y[start_idx * output_dim], 
-                                 batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+            // Copy batch data in column-major format
+            for (int feature = 0; feature < input_dim; feature++) {
+                memcpy(&X_batch[feature * batch_size], 
+                       &X[feature * num_samples + start_idx], 
+                       batch_size * sizeof(float));
+            }
+            
+            for (int out = 0; out < output_dim; out++) {
+                memcpy(&y_batch[out * batch_size],
+                       &y[out * num_samples + start_idx],
+                       batch_size * sizeof(float));
+            }
+            
+            // Copy to device
+            CHECK_CUDA(cudaMemcpy(d_X, X_batch, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+            CHECK_CUDA(cudaMemcpy(d_y, y_batch, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
             
             // Forward pass
             forward_pass_mlp(mlp, d_X);
@@ -92,20 +106,29 @@ int main() {
     // Load the model back with original batch_size
     MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle);
     
-    // Copy first batch for evaluation
-    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+    // Evaluate on first batch
+    for (int feature = 0; feature < input_dim; feature++) {
+        memcpy(&X_batch[feature * batch_size], 
+               &X[feature * num_samples], 
+               batch_size * sizeof(float));
+    }
     
-    // Allocate host memory for predictions
-    float* predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
-
+    for (int out = 0; out < output_dim; out++) {
+        memcpy(&y_batch[out * batch_size],
+               &y[out * num_samples],
+               batch_size * sizeof(float));
+    }
+    
+    // Copy to device
+    CHECK_CUDA(cudaMemcpy(d_X, X_batch, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y, y_batch, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+    
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, d_X);
     
-    // Copy predictions from device to host
-    CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer_output, 
-                         batch_size * output_dim * sizeof(float),
-                         cudaMemcpyDeviceToHost));
+    // Copy predictions back to host
+    CHECK_CUDA(cudaMemcpy(y_batch, loaded_mlp->d_layer_output, 
+                         batch_size * output_dim * sizeof(float), cudaMemcpyDeviceToHost));
     
     // Calculate and print loss with loaded model
     float verification_loss = calculate_loss_mlp(loaded_mlp, d_y);
@@ -118,15 +141,17 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         float y_mean = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            y_mean += y[j * output_dim + i];
+            y_mean += y[i * num_samples + j];
         }
         y_mean /= batch_size;
 
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            float diff_res = y[j * output_dim + i] - predictions[j * output_dim + i];
-            float diff_tot = y[j * output_dim + i] - y_mean;
+            float actual = y[i * num_samples + j];
+            float pred = y_batch[i * batch_size + j];
+            float diff_res = actual - pred;
+            float diff_tot = actual - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
         }
@@ -142,8 +167,8 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = predictions[j * output_dim + i];
-            float actual = y[j * output_dim + i];
+            float pred = y_batch[i * batch_size + j];
+            float actual = y[i * num_samples + j];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
         }
@@ -151,7 +176,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            mae += fabs(predictions[j * output_dim + i] - y[j * output_dim + i]);
+            mae += fabs(y_batch[i * batch_size + j] - y[i * num_samples + j]);
         }
         mae /= batch_size;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
@@ -160,7 +185,8 @@ int main() {
     // Cleanup
     free(X);
     free(y);
-    free(predictions);
+    free(X_batch);
+    free(y_batch);
     CHECK_CUDA(cudaFree(d_X));
     CHECK_CUDA(cudaFree(d_y));
     free_mlp(mlp);

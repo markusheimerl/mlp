@@ -41,8 +41,17 @@ int main() {
             int start_idx = batch * batch_size;
             
             // Copy batch data
-            memcpy(X_batch, &X[start_idx * input_dim], batch_size * input_dim * sizeof(float));
-            memcpy(y_batch, &y[start_idx * output_dim], batch_size * output_dim * sizeof(float));
+            for (int feature = 0; feature < input_dim; feature++) {
+                memcpy(&X_batch[feature * batch_size], 
+                       &X[feature * num_samples + start_idx], 
+                       batch_size * sizeof(float));
+            }
+             
+            for (int out = 0; out < output_dim; out++) {
+                memcpy(&y_batch[out * batch_size],
+                       &y[out * num_samples + start_idx],
+                       batch_size * sizeof(float));
+            }
             
             // Forward pass
             forward_pass_mlp(mlp, X_batch);
@@ -87,8 +96,17 @@ int main() {
     MLP* loaded_mlp = load_mlp(model_fname, batch_size);
     
     // Evaluate on first batch
-    memcpy(X_batch, X, batch_size * input_dim * sizeof(float));
-    memcpy(y_batch, y, batch_size * output_dim * sizeof(float));
+    for (int feature = 0; feature < input_dim; feature++) {
+        memcpy(&X_batch[feature * batch_size], 
+               &X[feature * num_samples], 
+               batch_size * sizeof(float));
+    }
+    
+    for (int out = 0; out < output_dim; out++) {
+        memcpy(&y_batch[out * batch_size],
+               &y[out * num_samples],
+               batch_size * sizeof(float));
+    }
     
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, X_batch);
@@ -104,15 +122,15 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         float y_mean = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            y_mean += y_batch[j * output_dim + i];
+            y_mean += y_batch[i * batch_size + j];
         }
         y_mean /= batch_size;
 
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            float diff_res = y_batch[j * output_dim + i] - loaded_mlp->layer_output[j * output_dim + i];
-            float diff_tot = y_batch[j * output_dim + i] - y_mean;
+            float diff_res = y_batch[i * batch_size + j] - loaded_mlp->layer_output[i * batch_size + j];
+            float diff_tot = y_batch[i * batch_size + j] - y_mean;
             ss_res += diff_res * diff_res;
             ss_tot += diff_tot * diff_tot;
         }
@@ -128,8 +146,8 @@ int main() {
     for (int i = 0; i < output_dim; i++) {
         printf("\ny%d:\n", i);
         for (int j = 0; j < 15; j++) {
-            float pred = loaded_mlp->layer_output[j * output_dim + i];
-            float actual = y_batch[j * output_dim + i];
+            float pred = loaded_mlp->layer_output[i * batch_size + j];
+            float actual = y_batch[i * batch_size + j];
             float diff = pred - actual;
             printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
         }
@@ -137,7 +155,7 @@ int main() {
         // Calculate MAE for this output
         float mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            mae += fabs(loaded_mlp->layer_output[j * output_dim + i] - y_batch[j * output_dim + i]);
+            mae += fabs(loaded_mlp->layer_output[i * batch_size + j] - y_batch[i * batch_size + j]);
         }
         mae /= batch_size;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
