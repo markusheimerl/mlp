@@ -214,7 +214,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                                 mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
                                 &alpha, mlp->d_W1, mlp->input_dim,
                                 mlp->d_error_hidden, mlp->hidden_dim,
-                                &beta, d_grad_X, mlp->input_dim));
+                                &alpha, d_grad_X, mlp->input_dim));
     }
 }
 
