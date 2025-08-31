@@ -250,7 +250,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     int w1_size = mlp->hidden_dim * mlp->input_dim;
     int w2_size = mlp->output_dim * mlp->hidden_dim;
     
-    // Update W1 weights
+    // Update W₁ weights
     int W1_blocks = (w1_size + block_size - 1) / block_size;
     adamw_update_kernel_mlp<<<W1_blocks, block_size>>>(
         mlp->d_W1, mlp->d_W1_grad, mlp->d_W1_m, mlp->d_W1_v,
@@ -258,7 +258,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
         alpha_t, w1_size, mlp->batch_size
     );
     
-    // Update W2 weights
+    // Update W₂ weights
     int W2_blocks = (w2_size + block_size - 1) / block_size;
     adamw_update_kernel_mlp<<<W2_blocks, block_size>>>(
         mlp->d_W2, mlp->d_W2_grad, mlp->d_W2_m, mlp->d_W2_v,

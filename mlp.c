@@ -158,7 +158,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     int w1_size = mlp->hidden_dim * mlp->input_dim;
     int w2_size = mlp->output_dim * mlp->hidden_dim;
     
-    // Update W1 weights
+    // Update W₁ weights
     for (int i = 0; i < w1_size; i++) {
         float grad = mlp->W1_grad[i] / mlp->batch_size;
         
@@ -172,7 +172,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
         mlp->W1[i] = mlp->W1[i] * (1.0f - learning_rate * mlp->weight_decay) - update;
     }
     
-    // Update W2 weights
+    // Update W₂ weights
     for (int i = 0; i < w2_size; i++) {
         float grad = mlp->W2_grad[i] / mlp->batch_size;
 
