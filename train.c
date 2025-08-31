@@ -56,7 +56,7 @@ int main() {
 
             // Backward pass
             zero_gradients_mlp(mlp);
-            backward_pass_mlp(mlp, X_batch);
+            backward_pass_mlp(mlp, X_batch, NULL);
             
             // Update weights
             update_weights_mlp(mlp, learning_rate);
