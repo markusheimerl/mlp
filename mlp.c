@@ -68,10 +68,10 @@ void free_mlp(MLP* mlp) {
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
     // H = XW₁
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
-                1.0f, X, mlp->input_dim,
-                mlp->W1, mlp->hidden_dim,
+    cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+                mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
+                1.0f, mlp->W1, mlp->input_dim,
+                X, mlp->input_dim,
                 0.0f, mlp->layer_preact, mlp->hidden_dim);
     
     // S = Hσ(H)
@@ -80,10 +80,10 @@ void forward_pass_mlp(MLP* mlp, float* X) {
     }
     
     // Y = SW₂
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
-                1.0f, mlp->layer_postact, mlp->hidden_dim,
-                mlp->W2, mlp->output_dim,
+    cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+                mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
+                1.0f, mlp->W2, mlp->hidden_dim,
+                mlp->layer_postact, mlp->hidden_dim,
                 0.0f, mlp->layer_output, mlp->output_dim);
 }
 
@@ -110,17 +110,17 @@ void zero_gradients_mlp(MLP* mlp) {
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
     // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
-    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, mlp->layer_postact, mlp->hidden_dim,
                 mlp->error_output, mlp->output_dim,
-                1.0f, mlp->W2_grad, mlp->output_dim);
+                1.0f, mlp->W2_grad, mlp->hidden_dim);
     
     // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
-                1.0f, mlp->error_output, mlp->output_dim,
-                mlp->W2, mlp->output_dim,
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
+                1.0f, mlp->W2, mlp->hidden_dim,
+                mlp->error_output, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
     // ∂L/∂H = ∂L/∂S ⊙ [σ(H) + Hσ(H)(1-σ(H))]
@@ -131,18 +131,18 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂H)
-    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                 mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
                 mlp->error_hidden, mlp->hidden_dim,
-                1.0f, mlp->W1_grad, mlp->hidden_dim);
+                1.0f, mlp->W1_grad, mlp->input_dim);
     
     if (grad_X != NULL) {
         // ∂L/∂X = (∂L/∂H)W₁ᵀ
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    mlp->batch_size, mlp->input_dim, mlp->hidden_dim,
-                    1.0f, mlp->error_hidden, mlp->hidden_dim,
-                    mlp->W1, mlp->hidden_dim,
+        cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                    mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
+                    1.0f, mlp->W1, mlp->input_dim,
+                    mlp->error_hidden, mlp->hidden_dim,
                     0.0f, grad_X, mlp->input_dim);
     }
 }
