@@ -182,7 +182,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                             mlp->d_error_output, mlp->output_dim,
                             &alpha, mlp->d_W2_grad, mlp->hidden_dim));
 
-    // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
+    // ∂L/∂S = (∂L/∂Y)W₂ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
