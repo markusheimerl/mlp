@@ -14,22 +14,20 @@ int main() {
     CHECK_CUBLAS(cublasSetMathMode(cublas_handle, CUBLAS_TENSOR_OP_MATH));
 
     // Parameters
-    const int input_dim = 16;
+    const int input_dim = 64;
     const int hidden_dim = 256;
     const int output_dim = 4;
-    const int num_samples = 1024;
-    const int batch_size = num_samples; // Full batch training
+    const int num_samples = 4096;
+    const int batch_size = 512;
     
     // Generate synthetic data
     float *X, *y;
     generate_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
 
-    // Allocate device memory for input and output and copy data
+    // Allocate device memory for batches
     float *d_X, *d_y;
     CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
-    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
     
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
@@ -37,29 +35,45 @@ int main() {
     // Training parameters
     const int num_epochs = 10000;
     const float learning_rate = 0.0003f;
+    const int num_batches = num_samples / batch_size;
     
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
-        // Forward pass
-        forward_pass_mlp(mlp, d_X);
+        float epoch_loss = 0.0f;
         
-        // Calculate loss
-        float loss = calculate_loss_mlp(mlp, d_y);
+        for (int batch = 0; batch < num_batches; batch++) {
+            int start_idx = batch * batch_size;
+            
+            // Copy batch data to device
+            CHECK_CUDA(cudaMemcpy(d_X, &X[start_idx * input_dim], 
+                                 batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+            CHECK_CUDA(cudaMemcpy(d_y, &y[start_idx * output_dim], 
+                                 batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+            
+            // Forward pass
+            forward_pass_mlp(mlp, d_X);
+            
+            // Calculate loss
+            float loss = calculate_loss_mlp(mlp, d_y);
+            epoch_loss += loss;
+
+            // Don't update weights after final evaluation
+            if (epoch == num_epochs) continue;
+
+            // Backward pass
+            zero_gradients_mlp(mlp);
+            backward_pass_mlp(mlp, d_X);
+            
+            // Update weights
+            update_weights_mlp(mlp, learning_rate);
+        }
+        
+        epoch_loss /= num_batches;
 
         // Print progress
         if (epoch > 0 && epoch % 100 == 0) {
-            printf("Epoch [%d/%d], Loss: %.8f\n", epoch, num_epochs, loss);
+            printf("Epoch [%d/%d], Loss: %.8f\n", epoch, num_epochs, epoch_loss);
         }
-
-        // Don't update weights after final evaluation
-        if (epoch == num_epochs) break;
-
-        // Backward pass
-        zero_gradients_mlp(mlp);
-        backward_pass_mlp(mlp, d_X);
-        
-        // Update weights
-        update_weights_mlp(mlp, learning_rate);
     }
 
     // Get timestamp for filenames
@@ -78,35 +92,39 @@ int main() {
     // Load the model back with original batch_size
     MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle);
     
+    // Copy first batch for evaluation
+    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y, y, batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+    
     // Allocate host memory for predictions
-    float* predictions = (float*)malloc(num_samples * output_dim * sizeof(float));
+    float* predictions = (float*)malloc(batch_size * output_dim * sizeof(float));
 
     // Forward pass with loaded model
     forward_pass_mlp(loaded_mlp, d_X);
     
     // Copy predictions from device to host
     CHECK_CUDA(cudaMemcpy(predictions, loaded_mlp->d_layer_output, 
-                         num_samples * output_dim * sizeof(float),
+                         batch_size * output_dim * sizeof(float),
                          cudaMemcpyDeviceToHost));
     
     // Calculate and print loss with loaded model
     float verification_loss = calculate_loss_mlp(loaded_mlp, d_y);
-    printf("Loss with loaded model: %.8f\n", verification_loss);
+    printf("Loss with loaded model (first batch): %.8f\n", verification_loss);
 
     printf("\nEvaluating model performance...\n");
 
-    // Calculate R² scores
-    printf("\nR² scores:\n");
+    // Calculate R² scores on first batch
+    printf("\nR² scores (first batch):\n");
     for (int i = 0; i < output_dim; i++) {
         float y_mean = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
+        for (int j = 0; j < batch_size; j++) {
             y_mean += y[j * output_dim + i];
         }
-        y_mean /= num_samples;
+        y_mean /= batch_size;
 
         float ss_res = 0.0f;
         float ss_tot = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
+        for (int j = 0; j < batch_size; j++) {
             float diff_res = y[j * output_dim + i] - predictions[j * output_dim + i];
             float diff_tot = y[j * output_dim + i] - y_mean;
             ss_res += diff_res * diff_res;
@@ -132,10 +150,10 @@ int main() {
         
         // Calculate MAE for this output
         float mae = 0.0f;
-        for (int j = 0; j < num_samples; j++) {
+        for (int j = 0; j < batch_size; j++) {
             mae += fabs(predictions[j * output_dim + i] - y[j * output_dim + i]);
         }
-        mae /= num_samples;
+        mae /= batch_size;
         printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
     }
     
