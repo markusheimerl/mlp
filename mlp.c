@@ -143,7 +143,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
                     mlp->batch_size, mlp->input_dim, mlp->hidden_dim,
                     1.0f, mlp->error_hidden, mlp->hidden_dim,
                     mlp->W1, mlp->hidden_dim,
-                    1.0f, grad_X, mlp->input_dim);
+                    0.0f, grad_X, mlp->input_dim);
     }
 }
 

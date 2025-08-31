@@ -208,13 +208,13 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                             &alpha, mlp->d_W1_grad, mlp->input_dim));
     
     if (d_grad_X != NULL) {
-        // ∂L/∂X = (∂L/∂H)W₁^T
+        // ∂L/∂X = W₁(∂L/∂H)
         CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                                CUBLAS_OP_T, CUBLAS_OP_N,
+                                CUBLAS_OP_N, CUBLAS_OP_N,
                                 mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
                                 &alpha, mlp->d_W1, mlp->input_dim,
                                 mlp->d_error_hidden, mlp->hidden_dim,
-                                &alpha, d_grad_X, mlp->input_dim));
+                                &beta, d_grad_X, mlp->input_dim));  // Use beta=0 to initialize
     }
 }
 
