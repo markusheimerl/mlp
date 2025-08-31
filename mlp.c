@@ -67,7 +67,7 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // H = XW₁ = (W₁ᵀXᵀ)ᵀ
+    // H = XW₁
     cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
                 1.0f, mlp->W1, mlp->input_dim,
@@ -79,7 +79,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
         mlp->layer_postact[i] = mlp->layer_preact[i] / (1.0f + expf(-mlp->layer_preact[i]));
     }
     
-    // Y = SW₂ = (W₂ᵀSᵀ)ᵀ
+    // Y = SW₂
     cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
                 mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
                 1.0f, mlp->W2, mlp->hidden_dim,
@@ -109,14 +109,14 @@ void zero_gradients_mlp(MLP* mlp) {
 
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
-    // ∂L/∂W₂ = Sᵀ(∂L/∂Y) = ((∂L/∂Y)ᵀS)ᵀ
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, mlp->layer_postact, mlp->hidden_dim,
                 mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->hidden_dim);
     
-    // ∂L/∂S = (∂L/∂Y)W₂ᵀ = (W₂(∂L/∂Y)ᵀ)ᵀ
+    // ∂L/∂S = (∂L/∂Y)W₂ᵀ
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
                 1.0f, mlp->W2, mlp->hidden_dim,
@@ -130,7 +130,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
         mlp->error_hidden[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
     
-    // ∂L/∂W₁ = Xᵀ(∂L/∂H) = ((∂L/∂H)ᵀX)ᵀ
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                 mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
@@ -138,7 +138,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
                 1.0f, mlp->W1_grad, mlp->input_dim);
     
     if (grad_X != NULL) {
-        // ∂L/∂X = (∂L/∂H)W₁ᵀ = (W₁(∂L/∂H)ᵀ)ᵀ
+        // ∂L/∂X = (∂L/∂H)W₁ᵀ
         cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                     mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
                     1.0f, mlp->W1, mlp->input_dim,
