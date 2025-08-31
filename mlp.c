@@ -109,14 +109,14 @@ void zero_gradients_mlp(MLP* mlp) {
 
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
-    // ∂L/∂W₂ = S^T(∂L/∂Y)
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
                 1.0f, mlp->layer_postact, mlp->hidden_dim,
                 mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
-    // ∂L/∂S = (∂L/∂Y)(W₂)^T
+    // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
                 1.0f, mlp->error_output, mlp->output_dim,
@@ -130,7 +130,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
         mlp->error_hidden[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
     
-    // ∂L/∂W₁ = X^T(∂L/∂H)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
@@ -138,7 +138,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
                 1.0f, mlp->W1_grad, mlp->hidden_dim);
     
     if (grad_X != NULL) {
-        // ∂L/∂X = (∂L/∂H)W₁^T
+        // ∂L/∂X = (∂L/∂H)W₁ᵀ
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                     mlp->batch_size, mlp->input_dim, mlp->hidden_dim,
                     1.0f, mlp->error_hidden, mlp->hidden_dim,

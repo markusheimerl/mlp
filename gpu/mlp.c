@@ -174,7 +174,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // ∂L/∂W₂ = S^T(∂L/∂Y)
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
@@ -182,7 +182,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                             mlp->d_error_output, mlp->output_dim,
                             &alpha, mlp->d_W2_grad, mlp->hidden_dim));
 
-    // ∂L/∂S = (∂L/∂Y)(W₂)^T
+    // ∂L/∂S = (∂L/∂Y)(W₂)ᵀ
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_N,
                             mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
@@ -199,7 +199,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // ∂L/∂W₁ = X^T(∂L/∂H)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
                             CUBLAS_OP_N, CUBLAS_OP_T,
                             mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
