@@ -47,7 +47,7 @@ int main() {
         for (int batch = 0; batch < num_batches; batch++) {
             int start_idx = batch * batch_size;
             
-            // Copy batch data in column-major format
+            // Copy batch data
             for (int feature = 0; feature < input_dim; feature++) {
                 memcpy(&X_batch[feature * batch_size], 
                        &X[feature * num_samples + start_idx], 
@@ -130,56 +130,41 @@ int main() {
     CHECK_CUDA(cudaMemcpy(y_batch, loaded_mlp->d_layer_output, 
                          batch_size * output_dim * sizeof(float), cudaMemcpyDeviceToHost));
     
-    // Calculate and print loss with loaded model
-    float verification_loss = calculate_loss_mlp(loaded_mlp, d_y);
-    printf("Loss with loaded model (first batch): %.8f\n", verification_loss);
+    // Evaluate model performance on first batch
+    printf("Output\tR²\t\tMAE\t\tSample Predictions\n");
+    printf("------\t--------\t--------\t--------------------------------\n");
 
-    printf("\nEvaluating model performance...\n");
-
-    // Calculate R² scores on first batch
-    printf("\nR² scores (first batch):\n");
     for (int i = 0; i < output_dim; i++) {
+        // Calculate mean for R²
         float y_mean = 0.0f;
         for (int j = 0; j < batch_size; j++) {
             y_mean += y[i * num_samples + j];
         }
         y_mean /= batch_size;
-
-        float ss_res = 0.0f;
-        float ss_tot = 0.0f;
+        
+        // Calculate R² and MAE
+        float ss_res = 0.0f, ss_tot = 0.0f, mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            float actual = y[i * num_samples + j];
-            float pred = y_batch[i * batch_size + j];
-            float diff_res = actual - pred;
-            float diff_tot = actual - y_mean;
-            ss_res += diff_res * diff_res;
-            ss_tot += diff_tot * diff_tot;
-        }
-        float r2 = 1.0f - (ss_res / ss_tot);
-        printf("R² score for output y%d: %.8f\n", i, r2);
-    }
-
-    // Print sample predictions
-    printf("\nSample Predictions (first 15 samples):\n");
-    printf("Output\t\tPredicted\tActual\t\tDifference\n");
-    printf("------------------------------------------------------------\n");
-
-    for (int i = 0; i < output_dim; i++) {
-        printf("\ny%d:\n", i);
-        for (int j = 0; j < 15; j++) {
             float pred = y_batch[i * batch_size + j];
             float actual = y[i * num_samples + j];
             float diff = pred - actual;
-            printf("Sample %d:\t%8.3f\t%8.3f\t%8.3f\n", j, pred, actual, diff);
+            
+            ss_res += diff * diff;
+            ss_tot += (actual - y_mean) * (actual - y_mean);
+            mae += fabs(diff);
         }
         
-        // Calculate MAE for this output
-        float mae = 0.0f;
-        for (int j = 0; j < batch_size; j++) {
-            mae += fabs(y_batch[i * batch_size + j] - y[i * num_samples + j]);
-        }
+        float r2 = 1.0f - (ss_res / ss_tot);
         mae /= batch_size;
-        printf("Mean Absolute Error for y%d: %.3f\n", i, mae);
+        
+        // Print summary
+        printf("y%d\t%.6f\t%.3f\t\t", i, r2, mae);
+        for (int j = 0; j < 3; j++) {
+            float pred = y_batch[i * batch_size + j];
+            float actual = y[i * num_samples + j];
+            printf("%.2f/%.2f ", pred, actual);
+        }
+        printf("\n");
     }
     
     // Cleanup
