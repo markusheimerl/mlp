@@ -6,7 +6,7 @@ Consider a multilayer perceptron operating on batched inputs of shape (input_dim
 $$
 \begin{align*}
 H &= W_1X \\
-S &= H\sigma(H) \\
+S &= H \odot \sigma(H) \\
 Y &= W_2S
 \end{align*}
 $$
@@ -18,7 +18,7 @@ $$
 \frac{\partial L}{\partial Y} &= Y - Y_{\text{true}} \\
 \frac{\partial L}{\partial W_2} &= (\frac{\partial L}{\partial Y})S^\top \\
 \frac{\partial L}{\partial S} &= W_2^\top(\frac{\partial L}{\partial Y}) \\
-\frac{\partial L}{\partial H} &= \frac{\partial L}{\partial S} \odot [\sigma(H) + H\sigma(H)(1-\sigma(H))] \\
+\frac{\partial L}{\partial H} &= \frac{\partial L}{\partial S} \odot [\sigma(H) + H\sigma(H) \odot (1-\sigma(H))] \\
 \frac{\partial L}{\partial W_1} &= (\frac{\partial L}{\partial H})X^\top \\
 \frac{\partial L}{\partial X} &= W_1^\top(\frac{\partial L}{\partial H})
 \end{align*}
