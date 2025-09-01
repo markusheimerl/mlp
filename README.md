@@ -1,7 +1,7 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a multilayer perceptron operating on batched inputs of shape (input_dim × batch_size). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows:
+Consider a multilayer perceptron operating on batched inputs of shape (input_dim × batch_size). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
@@ -11,7 +11,7 @@ Y &= W_2S
 \end{align*}
 $$
 
-The input transformation matrix $W_1$ maps input features to hidden representations, and the output projection matrix $W_2$ transforms activated hidden states to outputs. The swish activation $H \odot \sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
+The input transformation matrix $W_1$ maps input features to hidden representations, and the output projection matrix $W_2$ transforms activated hidden states to outputs. The swish activation $H \odot \sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule:
 
 $$
 \begin{align*}
