@@ -11,7 +11,7 @@ Y &= W_2S
 \end{align*}
 $$
 
-The input transformation matrix $W_1$ maps input features to hidden representations, and the output projection matrix $W_2$ transforms activated hidden states to outputs. The swish activation $H\sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
+The input transformation matrix $W_1$ maps input features to hidden representations, and the output projection matrix $W_2$ transforms activated hidden states to outputs. The swish activation $H \odot \sigma(H)$ interpolates between linear and nonlinear regimes, yielding the following backward pass through the chain rule, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
