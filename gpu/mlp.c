@@ -22,8 +22,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     
     int w1_size = hidden_dim * input_dim;
     int w2_size = output_dim * hidden_dim;
-    int hidden_buffer_size = batch_size * hidden_dim;
-    int output_buffer_size = batch_size * output_dim;
+    int hidden_buffer_size = hidden_dim * batch_size;
+    int output_buffer_size = output_dim * batch_size;
     
     // Allocate host memory for weight initialization
     float* h_W1 = (float*)malloc(w1_size * sizeof(float));

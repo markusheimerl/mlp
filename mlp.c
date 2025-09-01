@@ -33,11 +33,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->W2_v = (float*)calloc(w2_size, sizeof(float));
     
     // Allocate layer outputs and working buffers
-    mlp->layer_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->layer_postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->layer_output = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->layer_preact = (float*)malloc(hidden_dim * batch_size * sizeof(float));
+    mlp->layer_postact = (float*)malloc(hidden_dim * batch_size * sizeof(float));
+    mlp->layer_output = (float*)malloc(output_dim * batch_size * sizeof(float));
+    mlp->error_hidden = (float*)malloc(hidden_dim * batch_size * sizeof(float));
+    mlp->error_output = (float*)malloc(output_dim * batch_size * sizeof(float));
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrtf(input_dim);
@@ -91,11 +91,11 @@ void forward_pass_mlp(MLP* mlp, float* X) {
 float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
     float loss = 0.0f;
-    for (int i = 0; i < mlp->batch_size * mlp->output_dim; i++) {
+    for (int i = 0; i < mlp->output_dim * mlp->batch_size; i++) {
         mlp->error_output[i] = mlp->layer_output[i] - y[i];
         loss += mlp->error_output[i] * mlp->error_output[i];
     }
-    return loss / (mlp->batch_size * mlp->output_dim);
+    return loss / (mlp->output_dim * mlp->batch_size);
 }
 
 // Zero gradients
