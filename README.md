@@ -1,7 +1,7 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a multilayer perceptron operating on batched inputs of shape (batch_size × input_dim). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows, where $\odot$ denotes elementwise multiplication:
+Consider a multilayer perceptron operating on batched inputs of shape (input_dim × batch_size). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
