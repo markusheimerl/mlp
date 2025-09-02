@@ -90,11 +90,16 @@ void forward_pass_mlp(MLP* mlp, float* X) {
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
-    float loss = 0.0f;
-    for (int i = 0; i < mlp->output_dim * mlp->batch_size; i++) {
-        mlp->error_output[i] = mlp->layer_output[i] - y[i];
-        loss += mlp->error_output[i] * mlp->error_output[i];
-    }
+    cblas_scopy(mlp->output_dim * mlp->batch_size, 
+                mlp->layer_output, 1, 
+                mlp->error_output, 1);
+    cblas_saxpy(mlp->output_dim * mlp->batch_size, 
+                -1.0f, y, 1, 
+                mlp->error_output, 1);
+    
+    float loss = cblas_sdot(mlp->output_dim * mlp->batch_size, 
+                           mlp->error_output, 1, 
+                           mlp->error_output, 1);
     return loss / (mlp->output_dim * mlp->batch_size);
 }
 

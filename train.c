@@ -30,9 +30,9 @@ int main() {
     const int num_batches = num_samples / batch_size;
     
     // Allocate batch buffers
-    float* X_batch = (float*)malloc(batch_size * input_dim * sizeof(float));
-    float* y_batch = (float*)malloc(batch_size * output_dim * sizeof(float));
-    
+    float* X_batch = (float*)malloc(input_dim * batch_size * sizeof(float));
+    float* y_batch = (float*)malloc(output_dim * batch_size * sizeof(float));
+
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
         float epoch_loss = 0.0f;
