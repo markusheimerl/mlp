@@ -42,27 +42,3 @@ sudo apt update
 sudo apt install clang time libopenblas-dev
 make run
 ```
-
-## Benchmarks
-
-### NVIDIA Jetson Orin Nano Super Developer Kit
-
-#### CPU
-```
-R² score for output y0: 0.99999571
-R² score for output y1: 0.99998200
-R² score for output y2: 0.99999940
-R² score for output y3: 0.99994481
-...
-3 minutes 39 seconds elapsed
-```
-
-#### GPU
-```
-R² score for output y0: 0.99999571
-R² score for output y1: 0.99998200
-R² score for output y2: 0.99999940
-R² score for output y3: 0.99994481
-...
-10 seconds elapsed
-```
