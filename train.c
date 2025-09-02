@@ -29,35 +29,17 @@ int main() {
     const float learning_rate = 0.0003f;
     const int num_batches = num_samples / batch_size;
     
-    // Allocate batch buffers
-    float* X_batch = (float*)malloc(input_dim * batch_size * sizeof(float));
-    float* y_batch = (float*)malloc(output_dim * batch_size * sizeof(float));
-
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
         float epoch_loss = 0.0f;
         
         for (int batch = 0; batch < num_batches; batch++) {
-            int start_idx = batch * batch_size;
-            
-            // Copy batch data
-            for (int feature = 0; feature < input_dim; feature++) {
-                memcpy(&X_batch[feature * batch_size], 
-                       &X[feature * num_samples + start_idx], 
-                       batch_size * sizeof(float));
-            }
-             
-            for (int out = 0; out < output_dim; out++) {
-                memcpy(&y_batch[out * batch_size],
-                       &y[out * num_samples + start_idx],
-                       batch_size * sizeof(float));
-            }
-            
+
             // Forward pass
-            forward_pass_mlp(mlp, X_batch);
+            forward_pass_mlp(mlp, &X[batch * batch_size * input_dim]);
             
             // Calculate loss
-            float loss = calculate_loss_mlp(mlp, y_batch);
+            float loss = calculate_loss_mlp(mlp, &y[batch * batch_size * output_dim]);
             epoch_loss += loss;
 
             // Don't update weights after final evaluation
@@ -65,7 +47,7 @@ int main() {
 
             // Backward pass
             zero_gradients_mlp(mlp);
-            backward_pass_mlp(mlp, X_batch, NULL);
+            backward_pass_mlp(mlp, &X[batch * batch_size * input_dim], NULL);
             
             // Update weights
             update_weights_mlp(mlp, learning_rate);
@@ -94,22 +76,9 @@ int main() {
 
     // Load the model back with original batch_size
     MLP* loaded_mlp = load_mlp(model_fname, batch_size);
-    
-    // Evaluate on first batch
-    for (int feature = 0; feature < input_dim; feature++) {
-        memcpy(&X_batch[feature * batch_size], 
-               &X[feature * num_samples], 
-               batch_size * sizeof(float));
-    }
-    
-    for (int out = 0; out < output_dim; out++) {
-        memcpy(&y_batch[out * batch_size],
-               &y[out * num_samples],
-               batch_size * sizeof(float));
-    }
-    
-    // Forward pass with loaded model
-    forward_pass_mlp(loaded_mlp, X_batch);
+
+    // Forward pass with loaded model on first batch
+    forward_pass_mlp(loaded_mlp, X);
 
     // Evaluate model performance on first batch
     printf("Output\tR²\t\tMAE\t\tSample Predictions\n");
@@ -119,7 +88,7 @@ int main() {
         // Calculate mean for R²
         float y_mean = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            y_mean += y_batch[i * batch_size + j];
+            y_mean += y[i * batch_size + j];
         }
         y_mean /= batch_size;
         
@@ -127,7 +96,7 @@ int main() {
         float ss_res = 0.0f, ss_tot = 0.0f, mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
             float pred = loaded_mlp->layer_output[i * batch_size + j];
-            float actual = y_batch[i * batch_size + j];
+            float actual = y[i * batch_size + j];
             float diff = pred - actual;
             
             ss_res += diff * diff;
@@ -142,7 +111,7 @@ int main() {
         printf("y%d\t%.6f\t%.3f\t\t", i, r2, mae);
         for (int j = 0; j < 3; j++) {
             float pred = loaded_mlp->layer_output[i * batch_size + j];
-            float actual = y_batch[i * batch_size + j];
+            float actual = y[i * batch_size + j];
             printf("%.2f/%.2f ", pred, actual);
         }
         printf("\n");
@@ -151,8 +120,6 @@ int main() {
     // Cleanup
     free(X);
     free(y);
-    free(X_batch);
-    free(y_batch);
     free_mlp(mlp);
     free_mlp(loaded_mlp);
     
