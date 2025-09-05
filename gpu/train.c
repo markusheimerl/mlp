@@ -14,21 +14,21 @@ int main() {
     CHECK_CUBLAS(cublasSetMathMode(cublas_handle, CUBLAS_TENSOR_OP_MATH));
 
     // Parameters
-    const int input_dim = 64;
+    const int input_dim = 16;
     const int hidden_dim = 256;
-    const int output_dim = 4;
-    const int num_samples = 4096;
+    const int output_dim = 16;
+    const int num_samples = 524288;
     const int batch_size = 512;
     
     // Generate synthetic data
     float *X, *y;
-    generate_data(&X, &y, num_samples, input_dim, output_dim, -3.0f, 3.0f);
+    generate_data(&X, &y, num_samples, input_dim, output_dim, -30.0f, 30.0f);
 
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
     
     // Training parameters
-    const int num_epochs = 10000;
+    const int num_epochs = 10;
     const float learning_rate = 0.0003f;
     const int num_batches = num_samples / batch_size;
     
@@ -68,7 +68,7 @@ int main() {
         epoch_loss /= num_batches;
 
         // Print progress
-        if (epoch % 100 == 0) {
+        if (epoch % 2 == 0) {
             printf("Epoch [%d/%d], Loss: %.8f\n", epoch, num_epochs, epoch_loss);
         }
     }

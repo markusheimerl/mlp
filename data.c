@@ -8,7 +8,7 @@ void generate_data(float** X, float** y, int num_samples, int input_dim, int out
     *X = (float*)malloc(total_x * sizeof(float));
     *y = (float*)malloc(total_y * sizeof(float));
     
-    // Generate data in column-major format: [input_dim × num_samples]
+    // Generate input data in column-major format: [input_dim × num_samples]
     for (int sample = 0; sample < num_samples; sample++) {
         for (int feature = 0; feature < input_dim; feature++) {
             (*X)[feature * num_samples + sample] = range_min + 
@@ -16,16 +16,33 @@ void generate_data(float** X, float** y, int num_samples, int input_dim, int out
         }
     }
     
-    // Generate output data in column-major format: [output_dim × num_samples]
-    for (int sample = 0; sample < num_samples; sample++) {
-        for (int out = 0; out < output_dim; out++) {
-            (*y)[out * num_samples + sample] = range_min + 
-                ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
-        }
+    // Create random transformation matrix W: [output_dim × input_dim]
+    float* W = (float*)malloc(output_dim * input_dim * sizeof(float));
+    float w_scale = 1.0f / sqrtf(input_dim);
+    
+    for (int i = 0; i < output_dim * input_dim; i++) {
+        W[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * w_scale;
     }
     
-    printf("Generated random data: %d samples, %d inputs, %d outputs\n", 
-           num_samples, input_dim, output_dim);
+    // Transform input data: y = W * X
+    // Using column-major BLAS: y[output_dim × num_samples] = W[output_dim × input_dim] * X[input_dim × num_samples]
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                output_dim, num_samples, input_dim,
+                1.0f, W, output_dim,
+                *X, input_dim,
+                0.0f, *y, output_dim);
+    
+    // Add noise to outputs
+    for (int i = 0; i < total_y; i++) {
+        float noise = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * w_scale;
+        (*y)[i] += noise;
+    }
+    
+    // Free temporary transformation matrix
+    free(W);
+    
+    printf("Generated regression data: %d samples, %d inputs, %d outputs (with %.3f noise)\n", 
+           num_samples, input_dim, output_dim, w_scale);
 }
 
 void save_data(float* X, float* y, int num_samples, int input_dim, int output_dim,
