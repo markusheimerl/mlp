@@ -1,7 +1,7 @@
 #include "mlp.h"
 
 // Initialize the MLP
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle) {
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle) {
     MLP* mlp = (MLP*)malloc(sizeof(MLP));
     
     // Store dimensions
@@ -17,8 +17,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     mlp->t = 0;
     mlp->weight_decay = 0.01f;
     
-    // Initialize cuBLAS
+    // Initialize cuBLAS and cuBLASLt
     mlp->cublas_handle = cublas_handle;
+    mlp->cublaslt_handle = cublaslt_handle;
     
     int w1_size = hidden_dim * input_dim;
     int w2_size = output_dim * hidden_dim;
@@ -72,6 +73,44 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMemset(mlp->d_W2_m, 0, w2_size * sizeof(float)));
     CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
     
+    // Create cuBLASLt matrix multiplication descriptors
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->forward_matmul_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_NT_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_TN_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    
+    // Set transpose operations for backward pass descriptors
+    cublasOperation_t transA = CUBLAS_OP_N;
+    cublasOperation_t transB = CUBLAS_OP_T;
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_NT_desc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_NT_desc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
+    
+    transA = CUBLAS_OP_T;
+    transB = CUBLAS_OP_N;
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
+    
+    // Create matrix layout descriptors for forward pass
+    // W1: [hidden_dim x input_dim], X: [input_dim x batch_size], H: [hidden_dim x batch_size]
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W1_layout, CUDA_R_32F, hidden_dim, input_dim, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->X_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->H_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    
+    // W2: [output_dim x hidden_dim], S: [hidden_dim x batch_size], Y: [output_dim x batch_size]
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W2_layout, CUDA_R_32F, output_dim, hidden_dim, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->S_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->Y_layout, CUDA_R_32F, output_dim, batch_size, output_dim));
+    
+    // Gradient layouts
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W1_grad_layout, CUDA_R_32F, hidden_dim, input_dim, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W2_grad_layout, CUDA_R_32F, output_dim, hidden_dim, output_dim));
+    
+    // Create matrix layout descriptors for backward pass
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->error_output_layout, CUDA_R_32F, output_dim, batch_size, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->postact_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->error_hidden_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->X_backward_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->grad_X_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    
     // Free host memory
     free(h_W1); free(h_W2);
     
@@ -80,6 +119,28 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
 
 // Free MLP memory
 void free_mlp(MLP* mlp) {
+    // Destroy cuBLASLt descriptors
+    cublasLtMatmulDescDestroy(mlp->forward_matmul_desc);
+    cublasLtMatmulDescDestroy(mlp->backward_matmul_NT_desc);
+    cublasLtMatmulDescDestroy(mlp->backward_matmul_TN_desc);
+    
+    // Destroy forward pass layouts
+    cublasLtMatrixLayoutDestroy(mlp->W1_layout);
+    cublasLtMatrixLayoutDestroy(mlp->X_layout);
+    cublasLtMatrixLayoutDestroy(mlp->H_layout);
+    cublasLtMatrixLayoutDestroy(mlp->W2_layout);
+    cublasLtMatrixLayoutDestroy(mlp->S_layout);
+    cublasLtMatrixLayoutDestroy(mlp->Y_layout);
+    cublasLtMatrixLayoutDestroy(mlp->W1_grad_layout);
+    cublasLtMatrixLayoutDestroy(mlp->W2_grad_layout);
+    
+    // Destroy backward pass layouts
+    cublasLtMatrixLayoutDestroy(mlp->error_output_layout);
+    cublasLtMatrixLayoutDestroy(mlp->postact_layout);
+    cublasLtMatrixLayoutDestroy(mlp->error_hidden_layout);
+    cublasLtMatrixLayoutDestroy(mlp->X_backward_layout);
+    cublasLtMatrixLayoutDestroy(mlp->grad_X_layout);
+    
     // Free device memory
     cudaFree(mlp->d_W1); cudaFree(mlp->d_W2);
     cudaFree(mlp->d_W1_grad); cudaFree(mlp->d_W2_grad);
@@ -116,12 +177,15 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float beta = 0.0f;
     
     // H = W₁X
-    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
-                            mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
-                            &alpha, mlp->d_W1, mlp->hidden_dim,
-                            d_X, mlp->input_dim,
-                            &beta, mlp->d_layer_preact, mlp->hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                  mlp->forward_matmul_desc,
+                                  &alpha,
+                                  mlp->d_W1, mlp->W1_layout,
+                                  d_X, mlp->X_layout,
+                                  &beta,
+                                  mlp->d_layer_preact, mlp->H_layout,
+                                  mlp->d_layer_preact, mlp->H_layout,
+                                  NULL, NULL, 0, 0));
 
     // S = H⊙σ(H)
     int block_size = 256;
@@ -133,12 +197,15 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     );
 
     // Y = W₂S
-    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
-                            mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
-                            &alpha, mlp->d_W2, mlp->output_dim,
-                            mlp->d_layer_postact, mlp->hidden_dim,
-                            &beta, mlp->d_layer_output, mlp->output_dim));
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                  mlp->forward_matmul_desc,
+                                  &alpha,
+                                  mlp->d_W2, mlp->W2_layout,
+                                  mlp->d_layer_postact, mlp->S_layout,
+                                  &beta,
+                                  mlp->d_layer_output, mlp->Y_layout,
+                                  mlp->d_layer_output, mlp->Y_layout,
+                                  NULL, NULL, 0, 0));
 }
 
 // Calculate loss
@@ -175,20 +242,26 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     const float beta = 0.0f;
 
     // ∂L/∂W₂ = (∂L/∂Y)Sᵀ
-    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_T,
-                            mlp->output_dim, mlp->hidden_dim, mlp->batch_size,
-                            &alpha, mlp->d_error_output, mlp->output_dim,
-                            mlp->d_layer_postact, mlp->hidden_dim,
-                            &alpha, mlp->d_W2_grad, mlp->output_dim));
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                  mlp->backward_matmul_NT_desc,
+                                  &alpha,
+                                  mlp->d_error_output, mlp->error_output_layout,
+                                  mlp->d_layer_postact, mlp->postact_layout,
+                                  &alpha,
+                                  mlp->d_W2_grad, mlp->W2_grad_layout,
+                                  mlp->d_W2_grad, mlp->W2_grad_layout,
+                                  NULL, NULL, 0, 0));
 
     // ∂L/∂S = W₂ᵀ(∂L/∂Y)
-    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_T, CUBLAS_OP_N,
-                            mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
-                            &alpha, mlp->d_W2, mlp->output_dim,
-                            mlp->d_error_output, mlp->output_dim,
-                            &beta, mlp->d_error_hidden, mlp->hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                  mlp->backward_matmul_TN_desc,
+                                  &alpha,
+                                  mlp->d_W2, mlp->W2_layout,
+                                  mlp->d_error_output, mlp->error_output_layout,
+                                  &beta,
+                                  mlp->d_error_hidden, mlp->error_hidden_layout,
+                                  mlp->d_error_hidden, mlp->error_hidden_layout,
+                                  NULL, NULL, 0, 0));
 
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
     int block_size = 256;
@@ -200,21 +273,27 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     );
 
     // ∂L/∂W₁ = (∂L/∂H)Xᵀ
-    CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                            CUBLAS_OP_N, CUBLAS_OP_T,
-                            mlp->hidden_dim, mlp->input_dim, mlp->batch_size,
-                            &alpha, mlp->d_error_hidden, mlp->hidden_dim,
-                            d_X, mlp->input_dim,
-                            &alpha, mlp->d_W1_grad, mlp->hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                  mlp->backward_matmul_NT_desc,
+                                  &alpha,
+                                  mlp->d_error_hidden, mlp->error_hidden_layout,
+                                  d_X, mlp->X_backward_layout,
+                                  &alpha,
+                                  mlp->d_W1_grad, mlp->W1_grad_layout,
+                                  mlp->d_W1_grad, mlp->W1_grad_layout,
+                                  NULL, NULL, 0, 0));
     
     if (d_grad_X != NULL) {
         // ∂L/∂X = W₁ᵀ(∂L/∂H)
-        CHECK_CUBLAS(cublasSgemm(mlp->cublas_handle,
-                                CUBLAS_OP_T, CUBLAS_OP_N,
-                                mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
-                                &alpha, mlp->d_W1, mlp->hidden_dim,
-                                mlp->d_error_hidden, mlp->hidden_dim,
-                                &beta, d_grad_X, mlp->input_dim));
+        CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
+                                      mlp->backward_matmul_TN_desc,
+                                      &alpha,
+                                      mlp->d_W1, mlp->W1_layout,
+                                      mlp->d_error_hidden, mlp->error_hidden_layout,
+                                      &beta,
+                                      d_grad_X, mlp->grad_X_layout,
+                                      d_grad_X, mlp->grad_X_layout,
+                                      NULL, NULL, 0, 0));
     }
 }
 
@@ -323,7 +402,7 @@ void save_mlp(MLP* mlp, const char* filename) {
 }
 
 // Load MLP weights from binary file
-MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle) {
+MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
@@ -340,7 +419,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas
     // Use custom_batch_size if provided, otherwise use stored value
     int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle, cublaslt_handle);
     
     int w1_size = hidden_dim * input_dim;
     int w2_size = output_dim * hidden_dim;

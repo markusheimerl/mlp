@@ -8,10 +8,12 @@
 int main() {
     srand(time(NULL));
 
-    // Initialize cuBLAS
+    // Initialize cuBLAS and cuBLASLt
     cublasHandle_t cublas_handle;
+    cublasLtHandle_t cublaslt_handle;
     CHECK_CUBLAS(cublasCreate(&cublas_handle));
     CHECK_CUBLAS(cublasSetMathMode(cublas_handle, CUBLAS_TENSOR_OP_MATH));
+    CHECK_CUBLASLT(cublasLtCreate(&cublaslt_handle));
 
     // Parameters
     const int input_dim = 16;
@@ -25,7 +27,7 @@ int main() {
     generate_data(&X, &y, num_samples, input_dim, output_dim, -30.0f, 30.0f);
 
     // Initialize network
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle, cublaslt_handle);
     
     // Training parameters
     const int num_epochs = 10;
@@ -87,7 +89,7 @@ int main() {
     printf("\nVerifying saved model...\n");
 
     // Load the model back with original batch_size
-    MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle);
+    MLP* loaded_mlp = load_mlp(model_fname, batch_size, cublas_handle, cublaslt_handle);
     
     // Forward pass with loaded model on first batch
     CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
@@ -143,6 +145,7 @@ int main() {
     free_mlp(mlp);
     free_mlp(loaded_mlp);
     CHECK_CUBLAS(cublasDestroy(cublas_handle));
+    CHECK_CUBLASLT(cublasLtDestroy(cublaslt_handle));
     
     return 0;
 }
