@@ -17,8 +17,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->t = 0;
     mlp->weight_decay = 0.01f;
     
-    int w1_size = hidden_dim * input_dim;
-    int w2_size = output_dim * hidden_dim;
+    int w1_size = input_dim * hidden_dim;
+    int w2_size = hidden_dim * output_dim;
     
     // Allocate weights and gradients
     mlp->W1 = (float*)malloc(w1_size * sizeof(float));
@@ -33,11 +33,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->W2_v = (float*)calloc(w2_size, sizeof(float));
     
     // Allocate layer outputs and working buffers
-    mlp->layer_preact = (float*)malloc(hidden_dim * batch_size * sizeof(float));
-    mlp->layer_postact = (float*)malloc(hidden_dim * batch_size * sizeof(float));
-    mlp->layer_output = (float*)malloc(output_dim * batch_size * sizeof(float));
-    mlp->error_hidden = (float*)malloc(hidden_dim * batch_size * sizeof(float));
-    mlp->error_output = (float*)malloc(output_dim * batch_size * sizeof(float));
+    mlp->layer_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->layer_postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->layer_output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->error_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->error_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrtf(input_dim);
@@ -67,11 +67,11 @@ void free_mlp(MLP* mlp) {
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, float* X) {
-    // H = W₁X
-    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                mlp->hidden_dim, mlp->batch_size, mlp->input_dim,
-                1.0f, mlp->W1, mlp->hidden_dim,
-                X, mlp->input_dim,
+    // H = XW₁
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
+                1.0f, X, mlp->input_dim,
+                mlp->W1, mlp->hidden_dim,
                 0.0f, mlp->layer_preact, mlp->hidden_dim);
     
     // S = H⊙σ(H)
@@ -79,11 +79,11 @@ void forward_pass_mlp(MLP* mlp, float* X) {
         mlp->layer_postact[i] = mlp->layer_preact[i] / (1.0f + expf(-mlp->layer_preact[i]));
     }
     
-    // Y = W₂S
-    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                mlp->output_dim, mlp->batch_size, mlp->hidden_dim,
-                1.0f, mlp->W2, mlp->output_dim,
-                mlp->layer_postact, mlp->hidden_dim,
+    // Y = SW₂
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
+                1.0f, mlp->layer_postact, mlp->hidden_dim,
+                mlp->W2, mlp->output_dim,
                 0.0f, mlp->layer_output, mlp->output_dim);
 }
 
@@ -105,8 +105,8 @@ float calculate_loss_mlp(MLP* mlp, float* y) {
 
 // Zero gradients
 void zero_gradients_mlp(MLP* mlp) {
-    int w1_size = mlp->hidden_dim * mlp->input_dim;
-    int w2_size = mlp->output_dim * mlp->hidden_dim;
+    int w1_size = mlp->input_dim * mlp->hidden_dim;
+    int w2_size = mlp->hidden_dim * mlp->output_dim;
     
     memset(mlp->W1_grad, 0, w1_size * sizeof(float));
     memset(mlp->W2_grad, 0, w2_size * sizeof(float));
@@ -114,18 +114,18 @@ void zero_gradients_mlp(MLP* mlp) {
 
 // Backward pass
 void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
-    // ∂L/∂W₂ = (∂L/∂Y)Sᵀ
-    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
-                mlp->output_dim, mlp->hidden_dim, mlp->batch_size,
-                1.0f, mlp->error_output, mlp->output_dim,
-                mlp->layer_postact, mlp->hidden_dim,
+    // ∂L/∂W₂ = S^T(∂L/∂Y)
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
+                1.0f, mlp->layer_postact, mlp->hidden_dim,
+                mlp->error_output, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
-    // ∂L/∂S = W₂ᵀ(∂L/∂Y)
-    cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
-                mlp->hidden_dim, mlp->batch_size, mlp->output_dim,
-                1.0f, mlp->W2, mlp->output_dim,
-                mlp->error_output, mlp->output_dim,
+    // ∂L/∂S = (∂L/∂Y)W₂^T
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
+                1.0f, mlp->error_output, mlp->output_dim,
+                mlp->W2, mlp->output_dim,
                 0.0f, mlp->error_hidden, mlp->hidden_dim);
     
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
@@ -135,19 +135,19 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
         mlp->error_hidden[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
     
-    // ∂L/∂W₁ = (∂L/∂H)Xᵀ
-    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans,
-                mlp->hidden_dim, mlp->input_dim, mlp->batch_size,
-                1.0f, mlp->error_hidden, mlp->hidden_dim,
-                X, mlp->input_dim,
+    // ∂L/∂W₁ = X^T(∂L/∂H)
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
+                1.0f, X, mlp->input_dim,
+                mlp->error_hidden, mlp->hidden_dim,
                 1.0f, mlp->W1_grad, mlp->hidden_dim);
     
     if (grad_X != NULL) {
-        // ∂L/∂X = W₁ᵀ(∂L/∂H)
-        cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,
-                    mlp->input_dim, mlp->batch_size, mlp->hidden_dim,
-                    1.0f, mlp->W1, mlp->hidden_dim,
-                    mlp->error_hidden, mlp->hidden_dim,
+        // ∂L/∂X = (∂L/∂H)W₁^T
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                    mlp->batch_size, mlp->input_dim, mlp->hidden_dim,
+                    1.0f, mlp->error_hidden, mlp->hidden_dim,
+                    mlp->W1, mlp->hidden_dim,
                     0.0f, grad_X, mlp->input_dim);
     }
 }
@@ -160,8 +160,8 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     float beta2_t = powf(mlp->beta2, mlp->t);
     float alpha_t = learning_rate * sqrtf(1.0f - beta2_t) / (1.0f - beta1_t);
     
-    int w1_size = mlp->hidden_dim * mlp->input_dim;
-    int w2_size = mlp->output_dim * mlp->hidden_dim;
+    int w1_size = mlp->input_dim * mlp->hidden_dim;
+    int w2_size = mlp->hidden_dim * mlp->output_dim;
     
     // Update W₁ weights
     for (int i = 0; i < w1_size; i++) {
@@ -206,8 +206,8 @@ void save_mlp(MLP* mlp, const char* filename) {
     fwrite(&mlp->output_dim, sizeof(int), 1, file);
     fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
-    int w1_size = mlp->hidden_dim * mlp->input_dim;
-    int w2_size = mlp->output_dim * mlp->hidden_dim;
+    int w1_size = mlp->input_dim * mlp->hidden_dim;
+    int w2_size = mlp->hidden_dim * mlp->output_dim;
     
     // Save weights
     fwrite(mlp->W1, sizeof(float), w1_size, file);
@@ -245,8 +245,8 @@ MLP* load_mlp(const char* filename, int custom_batch_size) {
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
-    int w1_size = hidden_dim * input_dim;
-    int w2_size = output_dim * hidden_dim;
+    int w1_size = input_dim * hidden_dim;
+    int w2_size = hidden_dim * output_dim;
     
     // Load weights
     fread(mlp->W1, sizeof(float), w1_size, file);

@@ -47,10 +47,10 @@
 
 typedef struct {
     // Weights and gradients
-    float* d_W1;      // [hidden_dim x input_dim]
-    float* d_W2;      // [output_dim x hidden_dim]
-    float* d_W1_grad; // [hidden_dim x input_dim]
-    float* d_W2_grad; // [output_dim x hidden_dim]
+    float* d_W1;      // [input_dim x hidden_dim]
+    float* d_W2;      // [hidden_dim x output_dim]
+    float* d_W1_grad; // [input_dim x hidden_dim]
+    float* d_W2_grad; // [hidden_dim x output_dim]
     
     // Adam parameters
     float* d_W1_m;    // First moment for W1
@@ -64,11 +64,11 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Layer outputs and working buffers
-    float* d_layer_preact;  // [hidden_dim x batch_size]
-    float* d_layer_postact; // [hidden_dim x batch_size]
-    float* d_layer_output;  // [output_dim x batch_size]
-    float* d_error_hidden;  // [hidden_dim x batch_size]
-    float* d_error_output;  // [output_dim x batch_size]
+    float* d_layer_preact;  // [batch_size x hidden_dim]
+    float* d_layer_postact; // [batch_size x hidden_dim]
+    float* d_layer_output;  // [batch_size x output_dim]
+    float* d_error_hidden;  // [batch_size x hidden_dim]
+    float* d_error_output;  // [batch_size x output_dim]
 
     // cuBLAS and cuBLASLt handles
     cublasHandle_t cublas_handle;

@@ -1,13 +1,13 @@
 # mlp
 A multilayer perceptron implementation
 
-Consider a multilayer perceptron operating on batched inputs of shape (input_dim × batch_size). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows, where $\odot$ denotes elementwise multiplication:
+Consider a multilayer perceptron operating on batched inputs of shape (batch_size × input_dim). The architecture consists of a linear transformation followed by swish activation and another linear transformation. The forward propagation follows, where $\odot$ denotes elementwise multiplication:
 
 $$
 \begin{align*}
-H &= W_1X \\
+H &= XW_1 \\
 S &= H \odot \sigma(H) \\
-Y &= W_2S
+Y &= SW_2
 \end{align*}
 $$
 
@@ -16,11 +16,11 @@ The input transformation matrix $W_1$ maps input features to hidden representati
 $$
 \begin{align*}
 \frac{\partial L}{\partial Y} &= Y - Y_{\text{true}} \\
-\frac{\partial L}{\partial W_2} &= (\frac{\partial L}{\partial Y})S^\top \\
-\frac{\partial L}{\partial S} &= W_2^\top(\frac{\partial L}{\partial Y}) \\
+\frac{\partial L}{\partial W_2} &= S^T(\frac{\partial L}{\partial Y}) \\
+\frac{\partial L}{\partial S} &= (\frac{\partial L}{\partial Y})W_2^T \\
 \frac{\partial L}{\partial H} &= \frac{\partial L}{\partial S} \odot [\sigma(H) + H \odot \sigma(H) \odot (1-\sigma(H))] \\
-\frac{\partial L}{\partial W_1} &= (\frac{\partial L}{\partial H})X^\top \\
-\frac{\partial L}{\partial X} &= W_1^\top(\frac{\partial L}{\partial H})
+\frac{\partial L}{\partial W_1} &= X^T(\frac{\partial L}{\partial H}) \\
+\frac{\partial L}{\partial X} &= (\frac{\partial L}{\partial H})W_1^T
 \end{align*}
 $$
 

@@ -8,28 +8,28 @@ void generate_data(float** X, float** y, int num_samples, int input_dim, int out
     *X = (float*)malloc(total_x * sizeof(float));
     *y = (float*)malloc(total_y * sizeof(float));
     
-    // Generate input data in column-major format: [input_dim × num_samples]
+    // Generate input data in row-major format: [num_samples × input_dim]
     for (int sample = 0; sample < num_samples; sample++) {
         for (int feature = 0; feature < input_dim; feature++) {
-            (*X)[feature * num_samples + sample] = range_min + 
+            (*X)[sample * input_dim + feature] = range_min + 
                 ((float)rand() / (float)RAND_MAX) * (range_max - range_min);
         }
     }
     
-    // Create random transformation matrix W: [output_dim × input_dim]
-    float* W = (float*)malloc(output_dim * input_dim * sizeof(float));
+    // Create random transformation matrix W: [input_dim × output_dim]
+    float* W = (float*)malloc(input_dim * output_dim * sizeof(float));
     float w_scale = 1.0f / sqrtf(input_dim);
     
-    for (int i = 0; i < output_dim * input_dim; i++) {
+    for (int i = 0; i < input_dim * output_dim; i++) {
         W[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * w_scale;
     }
     
-    // Transform input data: y = W * X
-    // Using column-major BLAS: y[output_dim × num_samples] = W[output_dim × input_dim] * X[input_dim × num_samples]
-    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                output_dim, num_samples, input_dim,
-                1.0f, W, output_dim,
-                *X, input_dim,
+    // Transform input data: y = X * W
+    // Using row-major BLAS: y[num_samples × output_dim] = X[num_samples × input_dim] * W[input_dim × output_dim]
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                num_samples, output_dim, input_dim,
+                1.0f, *X, input_dim,
+                W, output_dim,
                 0.0f, *y, output_dim);
     
     // Add noise to outputs
@@ -64,10 +64,10 @@ void save_data(float* X, float* y, int num_samples, int input_dim, int output_di
     // Data
     for (int s = 0; s < num_samples; s++) {
         for (int i = 0; i < input_dim; i++) {
-            fprintf(f, "%.6f,", X[i * num_samples + s]);
+            fprintf(f, "%.6f,", X[s * input_dim + i]);
         }
         for (int i = 0; i < output_dim; i++) {
-            fprintf(f, "%.6f%s", y[i * num_samples + s], i == output_dim-1 ? "\n" : ",");
+            fprintf(f, "%.6f%s", y[s * output_dim + i], i == output_dim-1 ? "\n" : ",");
         }
     }
     

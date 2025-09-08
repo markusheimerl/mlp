@@ -9,10 +9,10 @@
 
 typedef struct {
     // Weights and gradients
-    float* W1;      // [hidden_dim x input_dim]
-    float* W2;      // [output_dim x hidden_dim]
-    float* W1_grad; // [hidden_dim x input_dim]
-    float* W2_grad; // [output_dim x hidden_dim]
+    float* W1;      // [input_dim x hidden_dim]
+    float* W2;      // [hidden_dim x output_dim]
+    float* W1_grad; // [input_dim x hidden_dim]
+    float* W2_grad; // [hidden_dim x output_dim]
     
     // Adam parameters
     float* W1_m;    // First moment estimates for W1
@@ -26,11 +26,11 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW regularization
     
     // Layer outputs and working buffers
-    float* layer_preact;  // [hidden_dim x batch_size]
-    float* layer_postact; // [hidden_dim x batch_size]
-    float* layer_output;   // [output_dim x batch_size]
-    float* error_hidden; // [hidden_dim x batch_size]
-    float* error_output; // [output_dim x batch_size]
+    float* layer_preact;  // [batch_size x hidden_dim]
+    float* layer_postact; // [batch_size x hidden_dim]
+    float* layer_output;  // [batch_size x output_dim]
+    float* error_hidden;  // [batch_size x hidden_dim]
+    float* error_output;  // [batch_size x output_dim]
     
     // Dimensions
     int input_dim;
