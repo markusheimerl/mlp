@@ -266,7 +266,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
-    // ∂L/∂W₂ = S^T(∂L/∂Y)
+    // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                   mlp->backward_matmul_TN_desc,
                                   &alpha,
@@ -277,7 +277,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                                   mlp->d_W2_grad, mlp->W2_grad_layout,
                                   NULL, NULL, 0, 0));
 
-    // ∂L/∂S = (∂L/∂Y)W₂^T
+    // ∂L/∂S = (∂L/∂Y)W₂ᵀ
     CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                   mlp->backward_matmul_NT_desc,
                                   &alpha,
@@ -297,7 +297,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
         mlp->batch_size * mlp->hidden_dim
     );
 
-    // ∂L/∂W₁ = X^T(∂L/∂H)
+    // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                   mlp->backward_matmul_TN_desc,
                                   &alpha,
@@ -309,7 +309,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                                   NULL, NULL, 0, 0));
     
     if (d_grad_X != NULL) {
-        // ∂L/∂X = (∂L/∂H)W₁^T
+        // ∂L/∂X = (∂L/∂H)W₁ᵀ
         CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                       mlp->backward_matmul_NT_desc,
                                       &alpha,
