@@ -89,27 +89,52 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
     CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->backward_matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
     
+    // Column-major layout order
+    cublasLtOrder_t order = CUBLASLT_ORDER_COL;
+    
     // Create matrix layout descriptors for forward pass
     // W1: [hidden_dim x input_dim], X: [input_dim x batch_size], H: [hidden_dim x batch_size]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W1_layout, CUDA_R_32F, hidden_dim, input_dim, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W1_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->X_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->X_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->H_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->H_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
     // W2: [output_dim x hidden_dim], S: [hidden_dim x batch_size], Y: [output_dim x batch_size]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W2_layout, CUDA_R_32F, output_dim, hidden_dim, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W2_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->S_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->S_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->Y_layout, CUDA_R_32F, output_dim, batch_size, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->Y_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
     // Gradient layouts
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W1_grad_layout, CUDA_R_32F, hidden_dim, input_dim, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W1_grad_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W2_grad_layout, CUDA_R_32F, output_dim, hidden_dim, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W2_grad_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
     // Create matrix layout descriptors for backward pass
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->error_output_layout, CUDA_R_32F, output_dim, batch_size, output_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->error_output_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->postact_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->postact_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->error_hidden_layout, CUDA_R_32F, hidden_dim, batch_size, hidden_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->error_hidden_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->X_backward_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->X_backward_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
+    
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->grad_X_layout, CUDA_R_32F, input_dim, batch_size, input_dim));
+    CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->grad_X_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
     // Free host memory
     free(h_W1); free(h_W2);
