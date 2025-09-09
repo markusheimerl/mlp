@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <cublas_v2.h>
 #include <cublasLt.h>
 #include <cuda_runtime.h>
 
@@ -16,18 +15,6 @@
     if (err != cudaSuccess) { \
         fprintf(stderr, "CUDA error in %s:%d: %s\n", __FILE__, __LINE__, \
                 cudaGetErrorString(err)); \
-        exit(EXIT_FAILURE); \
-    } \
-} while(0)
-#endif
-
-// cuBLAS Error checking macro
-#ifndef CHECK_CUBLAS
-#define CHECK_CUBLAS(call) do { \
-    cublasStatus_t status = call; \
-    if (status != CUBLAS_STATUS_SUCCESS) { \
-        fprintf(stderr, "cuBLAS error in %s:%d: %d\n", __FILE__, __LINE__, \
-                (int)status); \
         exit(EXIT_FAILURE); \
     } \
 } while(0)
@@ -69,9 +56,9 @@ typedef struct {
     float* d_layer_output;  // [batch_size x output_dim]
     float* d_grad_hidden;   // [batch_size x hidden_dim]
     float* d_grad_output;   // [batch_size x output_dim]
+    float* d_loss_result;   // [1]
 
-    // cuBLAS and cuBLASLt handles
-    cublasHandle_t cublas_handle;
+    // cuBLASLt handle
     cublasLtHandle_t cublaslt_handle;
     
     // cuBLASLt descriptors for forward pass
@@ -97,7 +84,7 @@ typedef struct {
 } MLP;
 
 // Function prototypes
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle);
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasLtHandle_t cublaslt_handle);
 void free_mlp(MLP* mlp);
 void forward_pass_mlp(MLP* mlp, float* d_X);
 float calculate_loss_mlp(MLP* mlp, float* d_y);
@@ -105,6 +92,6 @@ void zero_gradients_mlp(MLP* mlp);
 void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X);
 void update_weights_mlp(MLP* mlp, float learning_rate);
 void save_mlp(MLP* mlp, const char* filename);
-MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle);
+MLP* load_mlp(const char* filename, int custom_batch_size, cublasLtHandle_t cublaslt_handle);
 
 #endif

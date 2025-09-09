@@ -1,7 +1,7 @@
 #include "mlp.h"
 
 // Initialize the MLP
-MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle) {
+MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasLtHandle_t cublaslt_handle) {
     MLP* mlp = (MLP*)malloc(sizeof(MLP));
     
     // Store dimensions
@@ -17,8 +17,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     mlp->t = 0;
     mlp->weight_decay = 0.01f;
     
-    // Initialize cuBLAS and cuBLASLt
-    mlp->cublas_handle = cublas_handle;
+    // Initialize cuBLASLt
     mlp->cublaslt_handle = cublaslt_handle;
     
     int w1_size = input_dim * hidden_dim;
@@ -62,6 +61,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     // Allocate device memory for backward pass buffers
     CHECK_CUDA(cudaMalloc(&mlp->d_grad_hidden, hidden_buffer_size * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_grad_output, output_buffer_size * sizeof(float)));
+    
+    // Allocate single device float for loss computation
+    CHECK_CUDA(cudaMalloc(&mlp->d_loss_result, sizeof(float)));
     
     // Copy weights to device
     CHECK_CUDA(cudaMemcpy(mlp->d_W1, h_W1, w1_size * sizeof(float), cudaMemcpyHostToDevice));
@@ -174,6 +176,10 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_layer_preact); cudaFree(mlp->d_layer_postact);
     cudaFree(mlp->d_layer_output);
     cudaFree(mlp->d_grad_hidden); cudaFree(mlp->d_grad_output);
+    
+    // Free loss computation buffer
+    cudaFree(mlp->d_loss_result);
+    
     free(mlp);
 }
 
@@ -233,11 +239,12 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                                   NULL, NULL, 0, 0));
 }
 
-// CUDA kernel for gradient calculation
-__global__ static void compute_loss_gradient_kernel(float* grad_output, float* predictions, float* targets, int size) {
+// CUDA kernel for computing loss and gradient
+__global__ static void compute_loss_and_gradient_kernel_mlp(float* grad_output, float* predictions, float* targets, float* loss_result, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
         grad_output[idx] = predictions[idx] - targets[idx];
+        atomicAdd(loss_result, grad_output[idx] * grad_output[idx]);
     }
 }
 
@@ -247,12 +254,20 @@ float calculate_loss_mlp(MLP* mlp, float* d_y) {
     int total_elements = mlp->batch_size * mlp->output_dim;
     int block_size = 256;
     int num_blocks = (total_elements + block_size - 1) / block_size;
-    compute_loss_gradient_kernel<<<num_blocks, block_size>>>(mlp->d_grad_output, mlp->d_layer_output, d_y, total_elements);
     
-    float loss = 0.0f;
-    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, total_elements, mlp->d_grad_output, 1, mlp->d_grad_output, 1, &loss));
+    // Reset loss accumulator to zero
+    CHECK_CUDA(cudaMemset(mlp->d_loss_result, 0, sizeof(float)));
     
-    return loss / total_elements;
+    // Compute gradient and accumulate loss
+    compute_loss_and_gradient_kernel_mlp<<<num_blocks, block_size>>>(
+        mlp->d_grad_output, mlp->d_layer_output, d_y, mlp->d_loss_result, total_elements
+    );
+    
+    // Copy result back to host
+    float total_loss;
+    CHECK_CUDA(cudaMemcpy(&total_loss, mlp->d_loss_result, sizeof(float), cudaMemcpyDeviceToHost));
+    
+    return total_loss / total_elements;
 }
 
 // Zero gradients
@@ -430,7 +445,7 @@ void save_mlp(MLP* mlp, const char* filename) {
 }
 
 // Load MLP weights from binary file
-MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle) {
+MLP* load_mlp(const char* filename, int custom_batch_size, cublasLtHandle_t cublaslt_handle) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
         printf("Error opening file for reading: %s\n", filename);
@@ -447,7 +462,7 @@ MLP* load_mlp(const char* filename, int custom_batch_size, cublasHandle_t cublas
     // Use custom_batch_size if provided, otherwise use stored value
     int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
-    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublas_handle, cublaslt_handle);
+    MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublaslt_handle);
     
     int w1_size = input_dim * hidden_dim;
     int w2_size = hidden_dim * output_dim;
