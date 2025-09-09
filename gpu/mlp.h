@@ -56,6 +56,8 @@ typedef struct {
     float* d_layer_output;  // [batch_size x output_dim]
     float* d_grad_hidden;   // [batch_size x hidden_dim]
     float* d_grad_output;   // [batch_size x output_dim]
+
+    // Loss computation buffer
     float* d_loss_result;   // [1]
 
     // cuBLASLt handle
