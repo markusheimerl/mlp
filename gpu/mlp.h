@@ -67,8 +67,8 @@ typedef struct {
     float* d_layer_preact;  // [batch_size x hidden_dim]
     float* d_layer_postact; // [batch_size x hidden_dim]
     float* d_layer_output;  // [batch_size x output_dim]
-    float* d_grad_hidden;  // [batch_size x hidden_dim]
-    float* d_grad_output;  // [batch_size x output_dim]
+    float* d_grad_hidden;   // [batch_size x hidden_dim]
+    float* d_grad_output;   // [batch_size x output_dim]
 
     // cuBLAS and cuBLASLt handles
     cublasHandle_t cublas_handle;
