@@ -74,9 +74,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
     
     // Create cuBLASLt matrix multiplication descriptors
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->forward_matmul_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_NT_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_TN_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->forward_matmul_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_NT_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->backward_matmul_TN_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
     
     // Set transpose operations for backward pass descriptors
     cublasOperation_t transA = CUBLAS_OP_N;
