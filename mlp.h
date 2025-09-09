@@ -29,8 +29,8 @@ typedef struct {
     float* layer_preact;  // [batch_size x hidden_dim]
     float* layer_postact; // [batch_size x hidden_dim]
     float* layer_output;  // [batch_size x output_dim]
-    float* error_hidden;  // [batch_size x hidden_dim]
-    float* error_output;  // [batch_size x output_dim]
+    float* grad_hidden;   // [batch_size x hidden_dim]
+    float* grad_output;   // [batch_size x output_dim]
     
     // Dimensions
     int input_dim;

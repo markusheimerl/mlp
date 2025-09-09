@@ -67,8 +67,8 @@ typedef struct {
     float* d_layer_preact;  // [batch_size x hidden_dim]
     float* d_layer_postact; // [batch_size x hidden_dim]
     float* d_layer_output;  // [batch_size x output_dim]
-    float* d_error_hidden;  // [batch_size x hidden_dim]
-    float* d_error_output;  // [batch_size x output_dim]
+    float* d_grad_hidden;  // [batch_size x hidden_dim]
+    float* d_grad_output;  // [batch_size x output_dim]
 
     // cuBLAS and cuBLASLt handles
     cublasHandle_t cublas_handle;
@@ -83,9 +83,9 @@ typedef struct {
     // cuBLASLt descriptors for backward pass
     cublasLtMatmulDesc_t backward_matmul_NT_desc;  // No transpose A, transpose B
     cublasLtMatmulDesc_t backward_matmul_TN_desc;  // Transpose A, no transpose B
-    cublasLtMatrixLayout_t error_output_layout;
+    cublasLtMatrixLayout_t grad_output_layout;
     cublasLtMatrixLayout_t postact_layout;
-    cublasLtMatrixLayout_t error_hidden_layout;
+    cublasLtMatrixLayout_t grad_hidden_layout;
     cublasLtMatrixLayout_t X_backward_layout;
     cublasLtMatrixLayout_t grad_X_layout;
     
@@ -98,7 +98,7 @@ typedef struct {
 
 // CUDA kernel prototypes
 __global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
-__global__ void swish_backward_kernel_mlp(float* error_hidden, float* pre_activation, int size);
+__global__ void swish_backward_kernel_mlp(float* grad_hidden, float* pre_activation, int size);
 __global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
 
 // Function prototypes
