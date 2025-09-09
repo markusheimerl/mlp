@@ -178,7 +178,7 @@ void free_mlp(MLP* mlp) {
 }
 
 // CUDA kernel for Swish activation
-__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size) {
+__global__ static void swish_forward_kernel_mlp(float* output, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
         float h = pre_activation[idx];
@@ -187,7 +187,7 @@ __global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, i
 }
 
 // CUDA kernel for Swish derivative
-__global__ void swish_backward_kernel_mlp(float* grad_hidden, float* pre_activation, int size) {
+__global__ static void swish_backward_kernel_mlp(float* grad_hidden, float* pre_activation, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
         float h = pre_activation[idx];
@@ -233,23 +233,26 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                                   NULL, NULL, 0, 0));
 }
 
+// CUDA kernel for gradient calculation
+__global__ static void compute_loss_gradient_kernel(float* grad_output, float* predictions, float* targets, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        grad_output[idx] = predictions[idx] - targets[idx];
+    }
+}
+
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* d_y) {
     // ∂L/∂Y = Y - Y_true
-    float loss = 0.0f;
-
-    const float alpha = 1.0f;
-    const float beta = -1.0f;
-    CHECK_CUBLAS(cublasSgeam(mlp->cublas_handle, 
-                            CUBLAS_OP_N, CUBLAS_OP_N,
-                            mlp->output_dim, mlp->batch_size,
-                            &alpha, mlp->d_layer_output, mlp->output_dim,
-                            &beta, d_y, mlp->output_dim,
-                            mlp->d_grad_output, mlp->output_dim));
-    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, (mlp->batch_size * mlp->output_dim), 
-                           mlp->d_grad_output, 1, mlp->d_grad_output, 1, &loss));
+    int total_elements = mlp->batch_size * mlp->output_dim;
+    int block_size = 256;
+    int num_blocks = (total_elements + block_size - 1) / block_size;
+    compute_loss_gradient_kernel<<<num_blocks, block_size>>>(mlp->d_grad_output, mlp->d_layer_output, d_y, total_elements);
     
-    return loss / (mlp->batch_size * mlp->output_dim);
+    float loss = 0.0f;
+    CHECK_CUBLAS(cublasSdot(mlp->cublas_handle, total_elements, mlp->d_grad_output, 1, mlp->d_grad_output, 1, &loss));
+    
+    return loss / total_elements;
 }
 
 // Zero gradients
@@ -323,7 +326,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
 }
 
 // CUDA kernel for AdamW update
-__global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v,
+__global__ static void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v,
                                         float beta1, float beta2, float epsilon, float learning_rate,
                                         float weight_decay, float alpha_t, int size, int batch_size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;

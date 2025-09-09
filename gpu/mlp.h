@@ -96,11 +96,6 @@ typedef struct {
     int batch_size;
 } MLP;
 
-// CUDA kernel prototypes
-__global__ void swish_forward_kernel_mlp(float* output, float* pre_activation, int size);
-__global__ void swish_backward_kernel_mlp(float* grad_hidden, float* pre_activation, int size);
-__global__ void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v, float beta1, float beta2, float epsilon, float learning_rate, float weight_decay, float alpha_t, int size, int batch_size);
-
 // Function prototypes
 MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasHandle_t cublas_handle, cublasLtHandle_t cublaslt_handle);
 void free_mlp(MLP* mlp);
