@@ -63,20 +63,17 @@ typedef struct {
     // cuBLASLt handle
     cublasLtHandle_t cublaslt_handle;
     
-    // cuBLASLt descriptors for forward pass
-    cublasLtMatmulDesc_t forward_matmul_desc;
-    cublasLtMatrixLayout_t W1_layout, X_layout, H_layout;
-    cublasLtMatrixLayout_t W2_layout, S_layout, Y_layout;
-    cublasLtMatrixLayout_t W1_grad_layout, W2_grad_layout;
+    // cuBLASLt descriptors
+    cublasLtMatmulDesc_t matmul_NN_desc;  // No transpose A, no transpose B
+    cublasLtMatmulDesc_t matmul_NT_desc;  // No transpose A, transpose B
+    cublasLtMatmulDesc_t matmul_TN_desc;  // Transpose A, no transpose B
     
-    // cuBLASLt descriptors for backward pass
-    cublasLtMatmulDesc_t backward_matmul_NT_desc;  // No transpose A, transpose B
-    cublasLtMatmulDesc_t backward_matmul_TN_desc;  // Transpose A, no transpose B
-    cublasLtMatrixLayout_t grad_output_layout;
-    cublasLtMatrixLayout_t postact_layout;
-    cublasLtMatrixLayout_t grad_hidden_layout;
-    cublasLtMatrixLayout_t X_backward_layout;
-    cublasLtMatrixLayout_t grad_X_layout;
+    // Matrix layouts
+    cublasLtMatrixLayout_t W1_layout;           // [input_dim x hidden_dim]
+    cublasLtMatrixLayout_t W2_layout;           // [hidden_dim x output_dim]
+    cublasLtMatrixLayout_t batch_input_layout;  // [batch_size x input_dim]
+    cublasLtMatrixLayout_t batch_hidden_layout; // [batch_size x hidden_dim]
+    cublasLtMatrixLayout_t batch_output_layout; // [batch_size x output_dim]
     
     // Dimensions
     int input_dim;
