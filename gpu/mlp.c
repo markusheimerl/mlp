@@ -53,14 +53,10 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMalloc(&mlp->d_W2_m, w2_size * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_W2_v, w2_size * sizeof(float)));
     
-    // Allocate device memory for forward pass buffers
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_preact, hidden_buffer_size * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_postact, hidden_buffer_size * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_output, output_buffer_size * sizeof(float)));
-    
-    // Allocate device memory for backward pass buffers
-    CHECK_CUDA(cudaMalloc(&mlp->d_grad_hidden, hidden_buffer_size * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_grad_output, output_buffer_size * sizeof(float)));
+    // Allocate device memory for buffers
+    CHECK_CUDA(cudaMalloc(&mlp->d_preact, hidden_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_postact, hidden_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_output, output_buffer_size * sizeof(float)));
     
     // Allocate single device float for loss computation
     CHECK_CUDA(cudaMalloc(&mlp->d_loss_result, sizeof(float)));
@@ -75,43 +71,30 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMemset(mlp->d_W2_m, 0, w2_size * sizeof(float)));
     CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
     
-    // Create cuBLASLt matrix multiplication descriptors
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_NN_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_NT_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_TN_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
-    
-    // Set transpose operations for descriptors
-    cublasOperation_t transA = CUBLAS_OP_N;
-    cublasOperation_t transB = CUBLAS_OP_T;
-    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_NT_desc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
-    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_NT_desc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
-    
-    transA = CUBLAS_OP_T;
-    transB = CUBLAS_OP_N;
-    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
-    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_TN_desc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
+    // Create cuBLASLt matrix multiplication descriptor
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
     
     // Row-major layout order
     cublasLtOrder_t order = CUBLASLT_ORDER_ROW;
     
     // Create matrix layout descriptors
-    // W1 and W1_grad: [input_dim x hidden_dim]
+    // W1: [input_dim x hidden_dim]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W1_layout, CUDA_R_32F, input_dim, hidden_dim, hidden_dim));
     CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W1_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
-    // W2 and W2_grad: [hidden_dim x output_dim]
+    // W2: [hidden_dim x output_dim]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->W2_layout, CUDA_R_32F, hidden_dim, output_dim, output_dim));
     CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->W2_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
-    // X and grad_X: [batch_size x input_dim]
+    // X: [batch_size x input_dim]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->batch_input_layout, CUDA_R_32F, batch_size, input_dim, input_dim));
     CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->batch_input_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
-    // H, S, grad_hidden, layer_preact, layer_postact: [batch_size x hidden_dim]
+    // H, S: [batch_size x hidden_dim]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->batch_hidden_layout, CUDA_R_32F, batch_size, hidden_dim, hidden_dim));
     CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->batch_hidden_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
-    // Y, grad_output, layer_output: [batch_size x output_dim]
+    // Y: [batch_size x output_dim]
     CHECK_CUBLASLT(cublasLtMatrixLayoutCreate(&mlp->batch_output_layout, CUDA_R_32F, batch_size, output_dim, output_dim));
     CHECK_CUBLASLT(cublasLtMatrixLayoutSetAttribute(mlp->batch_output_layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)));
     
@@ -123,10 +106,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
 
 // Free MLP memory
 void free_mlp(MLP* mlp) {
-    // Destroy cuBLASLt descriptors
-    cublasLtMatmulDescDestroy(mlp->matmul_NN_desc);
-    cublasLtMatmulDescDestroy(mlp->matmul_NT_desc);
-    cublasLtMatmulDescDestroy(mlp->matmul_TN_desc);
+    // Destroy cuBLASLt descriptor
+    cublasLtMatmulDescDestroy(mlp->matmul_desc);
     
     // Destroy matrix layouts
     cublasLtMatrixLayoutDestroy(mlp->W1_layout);
@@ -140,9 +121,8 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_grad); cudaFree(mlp->d_W2_grad);
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
-    cudaFree(mlp->d_layer_preact); cudaFree(mlp->d_layer_postact);
-    cudaFree(mlp->d_layer_output);
-    cudaFree(mlp->d_grad_hidden); cudaFree(mlp->d_grad_output);
+    cudaFree(mlp->d_preact); cudaFree(mlp->d_postact);
+    cudaFree(mlp->d_output);
     
     // Free loss computation buffer
     cudaFree(mlp->d_loss_result);
@@ -175,43 +155,35 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     const float beta = 0.0f;
     
     // H = XW₁
-    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                  mlp->matmul_NN_desc,
-                                  &alpha,
-                                  d_X, mlp->batch_input_layout,
-                                  mlp->d_W1, mlp->W1_layout,
-                                  &beta,
-                                  mlp->d_layer_preact, mlp->batch_hidden_layout,
-                                  mlp->d_layer_preact, mlp->batch_hidden_layout,
-                                  NULL, NULL, 0, 0));
+    LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_N, &alpha,
+              d_X, mlp->batch_input_layout,
+              mlp->d_W1, mlp->W1_layout,
+              &beta, mlp->d_preact, mlp->batch_hidden_layout);
 
     // S = H⊙σ(H)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_layer_postact,
-        mlp->d_layer_preact,
+        mlp->d_postact,
+        mlp->d_preact,
         mlp->batch_size * mlp->hidden_dim
     );
 
     // Y = SW₂
-    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                  mlp->matmul_NN_desc,
-                                  &alpha,
-                                  mlp->d_layer_postact, mlp->batch_hidden_layout,
-                                  mlp->d_W2, mlp->W2_layout,
-                                  &beta,
-                                  mlp->d_layer_output, mlp->batch_output_layout,
-                                  mlp->d_layer_output, mlp->batch_output_layout,
-                                  NULL, NULL, 0, 0));
+    LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_N, &alpha,
+              mlp->d_postact, mlp->batch_hidden_layout,
+              mlp->d_W2, mlp->W2_layout,
+              &beta, mlp->d_output, mlp->batch_output_layout);
 }
 
 // CUDA kernel for computing loss and gradient
 __global__ static void compute_loss_and_gradient_kernel_mlp(float* grad_output, float* predictions, float* targets, float* loss_result, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        grad_output[idx] = predictions[idx] - targets[idx];
-        atomicAdd(loss_result, grad_output[idx] * grad_output[idx]);
+        float pred = predictions[idx];
+        float diff = pred - targets[idx];
+        grad_output[idx] = diff;
+        atomicAdd(loss_result, diff * diff);
     }
 }
 
@@ -227,7 +199,7 @@ float calculate_loss_mlp(MLP* mlp, float* d_y) {
     
     // Compute gradient and accumulate loss
     compute_loss_and_gradient_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_grad_output, mlp->d_layer_output, d_y, mlp->d_loss_result, total_elements
+        mlp->d_output, mlp->d_output, d_y, mlp->d_loss_result, total_elements
     );
     
     // Copy result back to host
@@ -252,58 +224,43 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     const float beta = 0.0f;
 
     // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
-    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                  mlp->matmul_TN_desc,
-                                  &alpha,
-                                  mlp->d_layer_postact, mlp->batch_hidden_layout,
-                                  mlp->d_grad_output, mlp->batch_output_layout,
-                                  &alpha,
-                                  mlp->d_W2_grad, mlp->W2_layout,
-                                  mlp->d_W2_grad, mlp->W2_layout,
-                                  NULL, NULL, 0, 0));
+    LT_MATMUL(mlp, CUBLAS_OP_T, CUBLAS_OP_N, &alpha,
+              mlp->d_postact, mlp->batch_hidden_layout,
+              mlp->d_output, mlp->batch_output_layout,
+              &alpha, mlp->d_W2_grad, mlp->W2_layout);
 
     // ∂L/∂S = (∂L/∂Y)W₂ᵀ
-    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                  mlp->matmul_NT_desc,
-                                  &alpha,
-                                  mlp->d_grad_output, mlp->batch_output_layout,
-                                  mlp->d_W2, mlp->W2_layout,
-                                  &beta,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
-                                  NULL, NULL, 0, 0));
+    LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_T, &alpha,
+              mlp->d_output, mlp->batch_output_layout,
+              mlp->d_W2, mlp->W2_layout,
+              &beta, mlp->d_preact, mlp->batch_hidden_layout);
 
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
+    LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_N, &alpha,
+              d_X, mlp->batch_input_layout,
+              mlp->d_W1, mlp->W1_layout,
+              &beta, mlp->d_postact, mlp->batch_hidden_layout);
+    
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_backward_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_grad_hidden,
-        mlp->d_layer_preact,
+        mlp->d_preact,
+        mlp->d_postact,
         mlp->batch_size * mlp->hidden_dim
     );
 
     // ∂L/∂W₁ = Xᵀ(∂L/∂H)
-    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                  mlp->matmul_TN_desc,
-                                  &alpha,
-                                  d_X, mlp->batch_input_layout,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
-                                  &alpha,
-                                  mlp->d_W1_grad, mlp->W1_layout,
-                                  mlp->d_W1_grad, mlp->W1_layout,
-                                  NULL, NULL, 0, 0));
+    LT_MATMUL(mlp, CUBLAS_OP_T, CUBLAS_OP_N, &alpha,
+              d_X, mlp->batch_input_layout,
+              mlp->d_preact, mlp->batch_hidden_layout,
+              &alpha, mlp->d_W1_grad, mlp->W1_layout);
     
     if (d_grad_X != NULL) {
         // ∂L/∂X = (∂L/∂H)W₁ᵀ
-        CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
-                                      mlp->matmul_NT_desc,
-                                      &alpha,
-                                      mlp->d_grad_hidden, mlp->batch_hidden_layout,
-                                      mlp->d_W1, mlp->W1_layout,
-                                      &beta,
-                                      d_grad_X, mlp->batch_input_layout,
-                                      d_grad_X, mlp->batch_input_layout,
-                                      NULL, NULL, 0, 0));
+        LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_T, &alpha,
+                  mlp->d_preact, mlp->batch_hidden_layout,
+                  mlp->d_W1, mlp->W1_layout,
+                  &beta, d_grad_X, mlp->batch_input_layout);
     }
 }
 

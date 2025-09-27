@@ -32,6 +32,21 @@
 } while(0)
 #endif
 
+// cuBLASLt matrix multiplication macro
+#ifndef LT_MATMUL
+#define LT_MATMUL(mlp, opA, opB, alpha, A, layA, B, layB, beta, C, layC) do { \
+    cublasOperation_t _opA = opA, _opB = opB; \
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_desc, \
+                   CUBLASLT_MATMUL_DESC_TRANSA, &_opA, sizeof(_opA))); \
+    CHECK_CUBLASLT(cublasLtMatmulDescSetAttribute(mlp->matmul_desc, \
+                   CUBLASLT_MATMUL_DESC_TRANSB, &_opB, sizeof(_opB))); \
+    CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle, mlp->matmul_desc, \
+                                  alpha, A, layA, B, layB, \
+                                  beta, C, layC, \
+                                  C, layC, NULL, NULL, 0, 0)); \
+} while(0)
+#endif
+
 typedef struct {
     // Weights and gradients
     float* d_W1;      // [input_dim x hidden_dim]
@@ -50,23 +65,17 @@ typedef struct {
     int t;            // Time step
     float weight_decay; // Weight decay parameter for AdamW
     
-    // Layer outputs and working buffers
-    float* d_layer_preact;  // [batch_size x hidden_dim]
-    float* d_layer_postact; // [batch_size x hidden_dim]
-    float* d_layer_output;  // [batch_size x output_dim]
-    float* d_grad_hidden;   // [batch_size x hidden_dim]
-    float* d_grad_output;   // [batch_size x output_dim]
+    // Buffers
+    float* d_preact;  // [batch_size x hidden_dim]
+    float* d_postact; // [batch_size x hidden_dim]
+    float* d_output;  // [batch_size x output_dim]
 
     // Loss computation buffer
     float* d_loss_result;   // [1]
 
-    // cuBLASLt handle
+    // cuBLASLt handle and descriptor
     cublasLtHandle_t cublaslt_handle;
-    
-    // cuBLASLt descriptors
-    cublasLtMatmulDesc_t matmul_NN_desc;  // No transpose A, no transpose B
-    cublasLtMatmulDesc_t matmul_NT_desc;  // No transpose A, transpose B
-    cublasLtMatmulDesc_t matmul_TN_desc;  // Transpose A, no transpose B
+    cublasLtMatmulDesc_t matmul_desc;
     
     // Matrix layouts
     cublasLtMatrixLayout_t W1_layout;           // [input_dim x hidden_dim]
