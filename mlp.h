@@ -25,12 +25,14 @@ typedef struct {
     int t;          // Time step
     float weight_decay; // Weight decay parameter for AdamW regularization
     
-    // Layer outputs and working buffers
-    float* layer_preact;  // [batch_size x hidden_dim]
-    float* layer_postact; // [batch_size x hidden_dim]
-    float* layer_output;  // [batch_size x output_dim]
-    float* grad_hidden;   // [batch_size x hidden_dim]
-    float* grad_output;   // [batch_size x output_dim]
+    // Forward pass buffers
+    float* preact;  // [batch_size x hidden_dim]
+    float* postact; // [batch_size x hidden_dim]
+    float* output;  // [batch_size x output_dim]
+
+    // Backward pass buffers
+    float* grad_output;    // [batch_size x output_dim]
+    float* grad_postact;   // [batch_size x hidden_dim]
     
     // Dimensions
     int input_dim;

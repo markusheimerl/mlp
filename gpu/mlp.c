@@ -54,12 +54,12 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMalloc(&mlp->d_W2_v, w2_size * sizeof(float)));
     
     // Allocate device memory for forward pass buffers
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_preact, hidden_buffer_size * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_postact, hidden_buffer_size * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&mlp->d_layer_output, output_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_preact, hidden_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_postact, hidden_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_output, output_buffer_size * sizeof(float)));
     
     // Allocate device memory for backward pass buffers
-    CHECK_CUDA(cudaMalloc(&mlp->d_grad_hidden, hidden_buffer_size * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&mlp->d_grad_postact, hidden_buffer_size * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_grad_output, output_buffer_size * sizeof(float)));
     
     // Allocate single device float for loss computation
@@ -140,9 +140,9 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_grad); cudaFree(mlp->d_W2_grad);
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
-    cudaFree(mlp->d_layer_preact); cudaFree(mlp->d_layer_postact);
-    cudaFree(mlp->d_layer_output);
-    cudaFree(mlp->d_grad_hidden); cudaFree(mlp->d_grad_output);
+    cudaFree(mlp->d_preact); cudaFree(mlp->d_postact);
+    cudaFree(mlp->d_output);
+    cudaFree(mlp->d_grad_postact); cudaFree(mlp->d_grad_output);
     
     // Free loss computation buffer
     cudaFree(mlp->d_loss_result);
@@ -181,16 +181,16 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
                                   d_X, mlp->batch_input_layout,
                                   mlp->d_W1, mlp->W1_layout,
                                   &beta,
-                                  mlp->d_layer_preact, mlp->batch_hidden_layout,
-                                  mlp->d_layer_preact, mlp->batch_hidden_layout,
+                                  mlp->d_preact, mlp->batch_hidden_layout,
+                                  mlp->d_preact, mlp->batch_hidden_layout,
                                   NULL, NULL, 0, 0));
 
     // S = H⊙σ(H)
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_forward_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_layer_postact,
-        mlp->d_layer_preact,
+        mlp->d_postact,
+        mlp->d_preact,
         mlp->batch_size * mlp->hidden_dim
     );
 
@@ -198,11 +198,11 @@ void forward_pass_mlp(MLP* mlp, float* d_X) {
     CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                   mlp->matmul_NN_desc,
                                   &alpha,
-                                  mlp->d_layer_postact, mlp->batch_hidden_layout,
+                                  mlp->d_postact, mlp->batch_hidden_layout,
                                   mlp->d_W2, mlp->W2_layout,
                                   &beta,
-                                  mlp->d_layer_output, mlp->batch_output_layout,
-                                  mlp->d_layer_output, mlp->batch_output_layout,
+                                  mlp->d_output, mlp->batch_output_layout,
+                                  mlp->d_output, mlp->batch_output_layout,
                                   NULL, NULL, 0, 0));
 }
 
@@ -227,7 +227,7 @@ float calculate_loss_mlp(MLP* mlp, float* d_y) {
     
     // Compute gradient and accumulate loss
     compute_loss_and_gradient_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_grad_output, mlp->d_layer_output, d_y, mlp->d_loss_result, total_elements
+        mlp->d_grad_output, mlp->d_output, d_y, mlp->d_loss_result, total_elements
     );
     
     // Copy result back to host
@@ -255,7 +255,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
     CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                   mlp->matmul_TN_desc,
                                   &alpha,
-                                  mlp->d_layer_postact, mlp->batch_hidden_layout,
+                                  mlp->d_postact, mlp->batch_hidden_layout,
                                   mlp->d_grad_output, mlp->batch_output_layout,
                                   &alpha,
                                   mlp->d_W2_grad, mlp->W2_layout,
@@ -269,16 +269,16 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                                   mlp->d_grad_output, mlp->batch_output_layout,
                                   mlp->d_W2, mlp->W2_layout,
                                   &beta,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
+                                  mlp->d_grad_postact, mlp->batch_hidden_layout,
+                                  mlp->d_grad_postact, mlp->batch_hidden_layout,
                                   NULL, NULL, 0, 0));
 
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
     int block_size = 256;
     int num_blocks = (mlp->batch_size * mlp->hidden_dim + block_size - 1) / block_size;
     swish_backward_kernel_mlp<<<num_blocks, block_size>>>(
-        mlp->d_grad_hidden,
-        mlp->d_layer_preact,
+        mlp->d_grad_postact,
+        mlp->d_preact,
         mlp->batch_size * mlp->hidden_dim
     );
 
@@ -287,7 +287,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
                                   mlp->matmul_TN_desc,
                                   &alpha,
                                   d_X, mlp->batch_input_layout,
-                                  mlp->d_grad_hidden, mlp->batch_hidden_layout,
+                                  mlp->d_grad_postact, mlp->batch_hidden_layout,
                                   &alpha,
                                   mlp->d_W1_grad, mlp->W1_layout,
                                   mlp->d_W1_grad, mlp->W1_layout,
@@ -298,7 +298,7 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
         CHECK_CUBLASLT(cublasLtMatmul(mlp->cublaslt_handle,
                                       mlp->matmul_NT_desc,
                                       &alpha,
-                                      mlp->d_grad_hidden, mlp->batch_hidden_layout,
+                                      mlp->d_grad_postact, mlp->batch_hidden_layout,
                                       mlp->d_W1, mlp->W1_layout,
                                       &beta,
                                       d_grad_X, mlp->batch_input_layout,

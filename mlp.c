@@ -33,10 +33,10 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->W2_v = (float*)calloc(w2_size, sizeof(float));
     
     // Allocate layer outputs and working buffers
-    mlp->layer_preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->layer_postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
-    mlp->layer_output = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->grad_hidden = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->grad_postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->grad_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights
@@ -60,8 +60,8 @@ void free_mlp(MLP* mlp) {
     free(mlp->W1_grad); free(mlp->W2_grad);
     free(mlp->W1_m); free(mlp->W1_v);
     free(mlp->W2_m); free(mlp->W2_v);
-    free(mlp->layer_preact); free(mlp->layer_postact); free(mlp->layer_output);
-    free(mlp->grad_output); free(mlp->grad_hidden);
+    free(mlp->preact); free(mlp->postact); free(mlp->output);
+    free(mlp->grad_output); free(mlp->grad_postact);
     free(mlp);
 }
 
@@ -72,26 +72,26 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 mlp->batch_size, mlp->hidden_dim, mlp->input_dim,
                 1.0f, X, mlp->input_dim,
                 mlp->W1, mlp->hidden_dim,
-                0.0f, mlp->layer_preact, mlp->hidden_dim);
+                0.0f, mlp->preact, mlp->hidden_dim);
     
     // S = H⊙σ(H)
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        mlp->layer_postact[i] = mlp->layer_preact[i] / (1.0f + expf(-mlp->layer_preact[i]));
+        mlp->postact[i] = mlp->preact[i] / (1.0f + expf(-mlp->preact[i]));
     }
     
     // Y = SW₂
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 mlp->batch_size, mlp->output_dim, mlp->hidden_dim,
-                1.0f, mlp->layer_postact, mlp->hidden_dim,
+                1.0f, mlp->postact, mlp->hidden_dim,
                 mlp->W2, mlp->output_dim,
-                0.0f, mlp->layer_output, mlp->output_dim);
+                0.0f, mlp->output, mlp->output_dim);
 }
 
 // Calculate loss
 float calculate_loss_mlp(MLP* mlp, float* y) {
     // ∂L/∂Y = Y - Y_true
     cblas_scopy(mlp->batch_size * mlp->output_dim, 
-                mlp->layer_output, 1, 
+                mlp->output, 1, 
                 mlp->grad_output, 1);
     cblas_saxpy(mlp->batch_size * mlp->output_dim, 
                 -1.0f, y, 1, 
@@ -117,7 +117,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
     // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->hidden_dim, mlp->output_dim, mlp->batch_size,
-                1.0f, mlp->layer_postact, mlp->hidden_dim,
+                1.0f, mlp->postact, mlp->hidden_dim,
                 mlp->grad_output, mlp->output_dim,
                 1.0f, mlp->W2_grad, mlp->output_dim);
     
@@ -126,27 +126,27 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
                 mlp->batch_size, mlp->hidden_dim, mlp->output_dim,
                 1.0f, mlp->grad_output, mlp->output_dim,
                 mlp->W2, mlp->output_dim,
-                0.0f, mlp->grad_hidden, mlp->hidden_dim);
+                0.0f, mlp->grad_postact, mlp->hidden_dim);
     
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
-        float h = mlp->layer_preact[i];
+        float h = mlp->preact[i];
         float sigmoid = 1.0f / (1.0f + expf(-h));
-        mlp->grad_hidden[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
+        mlp->grad_postact[i] *= sigmoid + h * sigmoid * (1.0f - sigmoid);
     }
     
     // ∂L/∂W₁ = Xᵀ(∂L/∂H)
     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
                 mlp->input_dim, mlp->hidden_dim, mlp->batch_size,
                 1.0f, X, mlp->input_dim,
-                mlp->grad_hidden, mlp->hidden_dim,
+                mlp->grad_postact, mlp->hidden_dim,
                 1.0f, mlp->W1_grad, mlp->hidden_dim);
     
     if (grad_X != NULL) {
         // ∂L/∂X = (∂L/∂H)W₁ᵀ
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                     mlp->batch_size, mlp->input_dim, mlp->hidden_dim,
-                    1.0f, mlp->grad_hidden, mlp->hidden_dim,
+                    1.0f, mlp->grad_postact, mlp->hidden_dim,
                     mlp->W1, mlp->hidden_dim,
                     0.0f, grad_X, mlp->input_dim);
     }

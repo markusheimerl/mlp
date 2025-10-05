@@ -95,7 +95,7 @@ int main() {
         // Calculate R² and MAE
         float ss_res = 0.0f, ss_tot = 0.0f, mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            float pred = loaded_mlp->layer_output[j * output_dim + i];
+            float pred = loaded_mlp->output[j * output_dim + i];
             float actual = y[j * output_dim + i];
             float diff = pred - actual;
             
@@ -110,7 +110,7 @@ int main() {
         // Print summary
         printf("y%d\t%.6f\t%.3f\t\t", i, r2, mae);
         for (int j = 0; j < 3; j++) {
-            float pred = loaded_mlp->layer_output[j * output_dim + i];
+            float pred = loaded_mlp->output[j * output_dim + i];
             float actual = y[j * output_dim + i];
             printf("%.2f/%.2f ", pred, actual);
         }
