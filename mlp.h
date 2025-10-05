@@ -15,14 +15,14 @@ typedef struct {
     float* W2_grad; // [hidden_dim x output_dim]
     
     // Adam parameters
-    float* W1_m;    // First moment estimates for W1
-    float* W1_v;    // Second moment estimates for W1
-    float* W2_m;    // First moment estimates for W2
-    float* W2_v;    // Second moment estimates for W2
-    float beta1;    // Exponential decay rate for first moment estimates
-    float beta2;    // Exponential decay rate for second moment estimates
-    float epsilon;  // Small constant for numerical stability
-    int t;          // Time step
+    float* W1_m;        // First moment estimates for W1
+    float* W1_v;        // Second moment estimates for W1
+    float* W2_m;        // First moment estimates for W2
+    float* W2_v;        // Second moment estimates for W2
+    float beta1;        // Exponential decay rate for first moment estimates
+    float beta2;        // Exponential decay rate for second moment estimates
+    float epsilon;      // Small constant for numerical stability
+    int t;              // Time step
     float weight_decay; // Weight decay parameter for AdamW regularization
     
     // Forward pass buffers
