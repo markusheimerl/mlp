@@ -265,10 +265,10 @@ void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X) {
 // CUDA kernel for AdamW update
 __global__ static void adamw_update_kernel_mlp(float* weight, float* grad, float* m, float* v,
                                         float beta1, float beta2, float epsilon, float learning_rate,
-                                        float weight_decay, float alpha_t, int size, int batch_size) {
+                                        float weight_decay, float alpha_t, int size, int effective_batch_size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        float g = grad[idx] / batch_size;
+        float g = grad[idx] / effective_batch_size;  // Changed parameter name
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         m[idx] = beta1 * m[idx] + (1.0f - beta1) * g;
@@ -282,7 +282,7 @@ __global__ static void adamw_update_kernel_mlp(float* weight, float* grad, float
 }
 
 // Update weights using AdamW
-void update_weights_mlp(MLP* mlp, float learning_rate) {
+void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size) {
     mlp->t++;
     
     float beta1_t = powf(mlp->beta1, mlp->t);
@@ -299,7 +299,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     adamw_update_kernel_mlp<<<W1_blocks, block_size>>>(
         mlp->d_W1, mlp->d_W1_grad, mlp->d_W1_m, mlp->d_W1_v,
         mlp->beta1, mlp->beta2, mlp->epsilon, learning_rate, mlp->weight_decay,
-        alpha_t, w1_size, mlp->batch_size
+        alpha_t, w1_size, effective_batch_size
     );
     
     // Update W₂ weights
@@ -307,7 +307,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate) {
     adamw_update_kernel_mlp<<<W2_blocks, block_size>>>(
         mlp->d_W2, mlp->d_W2_grad, mlp->d_W2_m, mlp->d_W2_v,
         mlp->beta1, mlp->beta2, mlp->epsilon, learning_rate, mlp->weight_decay,
-        alpha_t, w2_size, mlp->batch_size
+        alpha_t, w2_size, effective_batch_size
     );
 }
 
