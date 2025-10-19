@@ -102,7 +102,7 @@ void forward_pass_mlp(MLP* mlp, float* d_X);
 float calculate_loss_mlp(MLP* mlp, float* d_y);
 void zero_gradients_mlp(MLP* mlp);
 void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X);
-void update_weights_mlp(MLP* mlp, float learning_rate);
+void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size);
 void save_mlp(MLP* mlp, const char* filename);
 MLP* load_mlp(const char* filename, int custom_batch_size, cublasLtHandle_t cublaslt_handle);
 

@@ -61,7 +61,7 @@ int main() {
             backward_pass_mlp(mlp, d_X, NULL);
             
             // Update weights
-            update_weights_mlp(mlp, learning_rate);
+            update_weights_mlp(mlp, learning_rate, batch_size);
         }
         
         epoch_loss /= num_batches;
