@@ -324,8 +324,6 @@ void reset_optimizer_mlp(MLP* mlp) {
     
     // Reset time step
     mlp->t = 0;
-    
-    printf("Optimizer state reset\n");
 }
 
 // Save MLP weights to binary file

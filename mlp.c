@@ -205,8 +205,6 @@ void reset_optimizer_mlp(MLP* mlp) {
     
     // Reset time step
     mlp->t = 0;
-    
-    printf("Optimizer state reset\n");
 }
 
 // Save model weights and Adam state to binary file
