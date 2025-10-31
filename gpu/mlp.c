@@ -311,6 +311,23 @@ void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size)
     );
 }
 
+// Reset optimizer state
+void reset_optimizer_mlp(MLP* mlp) {
+    int w1_size = mlp->input_dim * mlp->hidden_dim;
+    int w2_size = mlp->hidden_dim * mlp->output_dim;
+    
+    // Reset Adam moment estimates to zero on device
+    CHECK_CUDA(cudaMemset(mlp->d_W1_m, 0, w1_size * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W1_v, 0, w1_size * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W2_m, 0, w2_size * sizeof(float)));
+    CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
+    
+    // Reset time step
+    mlp->t = 0;
+    
+    printf("Optimizer state reset\n");
+}
+
 // Save MLP weights to binary file
 void save_mlp(MLP* mlp, const char* filename) {
     FILE* file = fopen(filename, "wb");
