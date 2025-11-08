@@ -32,11 +32,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->W2_m = (float*)calloc(w2_size, sizeof(float));
     mlp->W2_v = (float*)calloc(w2_size, sizeof(float));
     
-    // Allocate layer outputs and working buffers
+    // Alias/Allocate layer outputs and working buffers
     mlp->preact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->output = (float*)malloc(batch_size * output_dim * sizeof(float));
-    mlp->grad_postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
+    mlp->grad_postact = mlp->postact;
     mlp->grad_output = (float*)malloc(batch_size * output_dim * sizeof(float));
     
     // Initialize weights
@@ -60,8 +60,8 @@ void free_mlp(MLP* mlp) {
     free(mlp->W1_grad); free(mlp->W2_grad);
     free(mlp->W1_m); free(mlp->W1_v);
     free(mlp->W2_m); free(mlp->W2_v);
-    free(mlp->preact); free(mlp->postact); free(mlp->output);
-    free(mlp->grad_output); free(mlp->grad_postact);
+    free(mlp->preact); free(mlp->postact);
+    free(mlp->output); free(mlp->grad_output);
     free(mlp);
 }
 
