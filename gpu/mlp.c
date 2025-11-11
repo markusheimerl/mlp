@@ -325,6 +325,7 @@ void reset_optimizer_mlp(MLP* mlp) {
     mlp->t = 0;
 }
 
+// Serialize MLP to a file
 void serialize_mlp(MLP* mlp, FILE* file) {
     // Write dimensions
     fwrite(&mlp->input_dim, sizeof(int), 1, file);
@@ -366,6 +367,7 @@ void serialize_mlp(MLP* mlp, FILE* file) {
     free(h_W2_m); free(h_W2_v);
 }
 
+// Deserialize MLP from a file
 MLP* deserialize_mlp(FILE* file, int custom_batch_size, cublasLtHandle_t cublaslt_handle) {
     // Read dimensions
     int input_dim, hidden_dim, output_dim, stored_batch_size;

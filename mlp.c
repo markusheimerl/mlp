@@ -207,6 +207,7 @@ void reset_optimizer_mlp(MLP* mlp) {
     mlp->t = 0;
 }
 
+// Serialize MLP to a file
 void serialize_mlp(MLP* mlp, FILE* file) {
     // Write dimensions
     fwrite(&mlp->input_dim, sizeof(int), 1, file);
@@ -228,6 +229,7 @@ void serialize_mlp(MLP* mlp, FILE* file) {
     fwrite(mlp->W2_v, sizeof(float), w2_size, file);
 }
 
+// Deserialize MLP from a file
 MLP* deserialize_mlp(FILE* file, int custom_batch_size) {
     // Read dimensions
     int input_dim, hidden_dim, output_dim, stored_batch_size;
