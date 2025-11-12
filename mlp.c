@@ -213,7 +213,6 @@ void serialize_mlp(MLP* mlp, FILE* file) {
     fwrite(&mlp->input_dim, sizeof(int), 1, file);
     fwrite(&mlp->hidden_dim, sizeof(int), 1, file);
     fwrite(&mlp->output_dim, sizeof(int), 1, file);
-    fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
     // Write weights
     int w1_size = mlp->input_dim * mlp->hidden_dim;
@@ -230,16 +229,12 @@ void serialize_mlp(MLP* mlp, FILE* file) {
 }
 
 // Deserialize MLP from a file
-MLP* deserialize_mlp(FILE* file, int custom_batch_size) {
+MLP* deserialize_mlp(FILE* file, int batch_size) {
     // Read dimensions
-    int input_dim, hidden_dim, output_dim, stored_batch_size;
+    int input_dim, hidden_dim, output_dim;
     fread(&input_dim, sizeof(int), 1, file);
     fread(&hidden_dim, sizeof(int), 1, file);
     fread(&output_dim, sizeof(int), 1, file);
-    fread(&stored_batch_size, sizeof(int), 1, file);
-    
-    // Use custom batch size if provided
-    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
     
     // Initialize MLP
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);

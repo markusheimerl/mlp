@@ -51,6 +51,6 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X);
 void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size);
 void reset_optimizer_mlp(MLP* mlp);
 void serialize_mlp(MLP* mlp, FILE* file);
-MLP* deserialize_mlp(FILE* file, int custom_batch_size);
+MLP* deserialize_mlp(FILE* file, int batch_size);
 
 #endif
