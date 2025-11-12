@@ -67,15 +67,22 @@ int main() {
     strftime(model_fname, sizeof(model_fname), "%Y%m%d_%H%M%S_model.bin", localtime(&now));
     strftime(data_fname, sizeof(data_fname), "%Y%m%d_%H%M%S_data.csv", localtime(&now));
 
-    // Save model and data with timestamped filenames
-    save_mlp(mlp, model_fname);
+    // Save model
+    FILE* model_file = fopen(model_fname, "wb");
+    serialize_mlp(mlp, model_file);
+    fclose(model_file);
+    printf("Model saved to %s\n", model_fname);
+    
+    // Save data
     save_data(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
-
-    // Load the model back with original batch_size
-    MLP* loaded_mlp = load_mlp(model_fname, batch_size);
+    
+    model_file = fopen(model_fname, "rb");
+    MLP* loaded_mlp = deserialize_mlp(model_file, batch_size);
+    fclose(model_file);
+    printf("Model loaded from %s\n", model_fname);
 
     // Forward pass with loaded model on first batch
     forward_pass_mlp(loaded_mlp, X);

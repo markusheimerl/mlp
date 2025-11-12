@@ -325,118 +325,90 @@ void reset_optimizer_mlp(MLP* mlp) {
     mlp->t = 0;
 }
 
-// Save MLP weights to binary file
-void save_mlp(MLP* mlp, const char* filename) {
-    FILE* file = fopen(filename, "wb");
-    if (!file) {
-        printf("Error opening file for writing: %s\n", filename);
-        return;
-    }
-    
-    // Save dimensions
+// Serialize MLP to a file
+void serialize_mlp(MLP* mlp, FILE* file) {
+    // Write dimensions
     fwrite(&mlp->input_dim, sizeof(int), 1, file);
     fwrite(&mlp->hidden_dim, sizeof(int), 1, file);
     fwrite(&mlp->output_dim, sizeof(int), 1, file);
-    fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
     int w1_size = mlp->input_dim * mlp->hidden_dim;
     int w2_size = mlp->hidden_dim * mlp->output_dim;
     
-    // Allocate temporary host memory for weights
+    // Allocate host buffers
     float* h_W1 = (float*)malloc(w1_size * sizeof(float));
     float* h_W2 = (float*)malloc(w2_size * sizeof(float));
-    
-    // Copy weights from device to host
-    CHECK_CUDA(cudaMemcpy(h_W1, mlp->d_W1, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(h_W2, mlp->d_W2, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
-    
-    fwrite(h_W1, sizeof(float), w1_size, file);
-    fwrite(h_W2, sizeof(float), w2_size, file);
-    
-    // Save Adam state
-    fwrite(&mlp->t, sizeof(int), 1, file);
-    
     float* h_W1_m = (float*)malloc(w1_size * sizeof(float));
     float* h_W1_v = (float*)malloc(w1_size * sizeof(float));
     float* h_W2_m = (float*)malloc(w2_size * sizeof(float));
     float* h_W2_v = (float*)malloc(w2_size * sizeof(float));
     
+    // Copy from device
+    CHECK_CUDA(cudaMemcpy(h_W1, mlp->d_W1, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_W2, mlp->d_W2, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W1_m, mlp->d_W1_m, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W1_v, mlp->d_W1_v, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W2_m, mlp->d_W2_m, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W2_v, mlp->d_W2_v, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
     
+    // Write to file
+    fwrite(h_W1, sizeof(float), w1_size, file);
+    fwrite(h_W2, sizeof(float), w2_size, file);
+    fwrite(&mlp->t, sizeof(int), 1, file);
     fwrite(h_W1_m, sizeof(float), w1_size, file);
     fwrite(h_W1_v, sizeof(float), w1_size, file);
     fwrite(h_W2_m, sizeof(float), w2_size, file);
     fwrite(h_W2_v, sizeof(float), w2_size, file);
     
-    // Free temporary host memory
+    // Free host buffers
     free(h_W1); free(h_W2);
     free(h_W1_m); free(h_W1_v);
     free(h_W2_m); free(h_W2_v);
-
-    fclose(file);
-    printf("Model saved to %s\n", filename);
 }
 
-// Load MLP weights from binary file
-MLP* load_mlp(const char* filename, int custom_batch_size, cublasLtHandle_t cublaslt_handle) {
-    FILE* file = fopen(filename, "rb");
-    if (!file) {
-        printf("Error opening file for reading: %s\n", filename);
-        return NULL;
-    }
-    
+// Deserialize MLP from a file
+MLP* deserialize_mlp(FILE* file, int batch_size, cublasLtHandle_t cublaslt_handle) {
     // Read dimensions
-    int input_dim, hidden_dim, output_dim, stored_batch_size;
+    int input_dim, hidden_dim, output_dim;
     fread(&input_dim, sizeof(int), 1, file);
     fread(&hidden_dim, sizeof(int), 1, file);
     fread(&output_dim, sizeof(int), 1, file);
-    fread(&stored_batch_size, sizeof(int), 1, file);
     
-    // Use custom_batch_size if provided, otherwise use stored value
-    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
-    
+    // Initialize MLP
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublaslt_handle);
     
     int w1_size = input_dim * hidden_dim;
     int w2_size = hidden_dim * output_dim;
     
-    // Load weights
+    // Allocate host buffers
     float* h_W1 = (float*)malloc(w1_size * sizeof(float));
     float* h_W2 = (float*)malloc(w2_size * sizeof(float));
-    
-    fread(h_W1, sizeof(float), w1_size, file);
-    fread(h_W2, sizeof(float), w2_size, file);
-    
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1, h_W1, w1_size * sizeof(float), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2, h_W2, w2_size * sizeof(float), cudaMemcpyHostToDevice));
-    
-    // Load Adam state
-    fread(&mlp->t, sizeof(int), 1, file);
-    
     float* h_W1_m = (float*)malloc(w1_size * sizeof(float));
     float* h_W1_v = (float*)malloc(w1_size * sizeof(float));
     float* h_W2_m = (float*)malloc(w2_size * sizeof(float));
     float* h_W2_v = (float*)malloc(w2_size * sizeof(float));
     
+    // Read from file
+    fread(h_W1, sizeof(float), w1_size, file);
+    fread(h_W2, sizeof(float), w2_size, file);
+    fread(&mlp->t, sizeof(int), 1, file);
     fread(h_W1_m, sizeof(float), w1_size, file);
     fread(h_W1_v, sizeof(float), w1_size, file);
     fread(h_W2_m, sizeof(float), w2_size, file);
     fread(h_W2_v, sizeof(float), w2_size, file);
     
+    // Copy to device
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1, h_W1, w1_size * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2, h_W2, w2_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W1_m, h_W1_m, w1_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W1_v, h_W1_v, w1_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W2_m, h_W2_m, w2_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W2_v, h_W2_v, w2_size * sizeof(float), cudaMemcpyHostToDevice));
     
+    // Free host buffers
     free(h_W1); free(h_W2);
     free(h_W1_m); free(h_W1_v);
     free(h_W2_m); free(h_W2_v);
-    
-    fclose(file);
-    printf("Model loaded from %s\n", filename);
     
     return mlp;
 }

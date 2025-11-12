@@ -207,75 +207,50 @@ void reset_optimizer_mlp(MLP* mlp) {
     mlp->t = 0;
 }
 
-// Save model weights and Adam state to binary file
-void save_mlp(MLP* mlp, const char* filename) {
-    FILE* file = fopen(filename, "wb");
-    if (!file) {
-        printf("Error opening file for writing: %s\n", filename);
-        return;
-    }
-    
-    // Save dimensions
+// Serialize MLP to a file
+void serialize_mlp(MLP* mlp, FILE* file) {
+    // Write dimensions
     fwrite(&mlp->input_dim, sizeof(int), 1, file);
     fwrite(&mlp->hidden_dim, sizeof(int), 1, file);
     fwrite(&mlp->output_dim, sizeof(int), 1, file);
-    fwrite(&mlp->batch_size, sizeof(int), 1, file);
     
+    // Write weights
     int w1_size = mlp->input_dim * mlp->hidden_dim;
     int w2_size = mlp->hidden_dim * mlp->output_dim;
-    
-    // Save weights
     fwrite(mlp->W1, sizeof(float), w1_size, file);
     fwrite(mlp->W2, sizeof(float), w2_size, file);
     
-    // Save Adam state
+    // Write optimizer state
     fwrite(&mlp->t, sizeof(int), 1, file);
     fwrite(mlp->W1_m, sizeof(float), w1_size, file);
     fwrite(mlp->W1_v, sizeof(float), w1_size, file);
     fwrite(mlp->W2_m, sizeof(float), w2_size, file);
     fwrite(mlp->W2_v, sizeof(float), w2_size, file);
-
-    fclose(file);
-    printf("Model saved to %s\n", filename);
 }
 
-// Load model weights and Adam state from binary file
-MLP* load_mlp(const char* filename, int custom_batch_size) {
-    FILE* file = fopen(filename, "rb");
-    if (!file) {
-        printf("Error opening file for reading: %s\n", filename);
-        return NULL;
-    }
-    
+// Deserialize MLP from a file
+MLP* deserialize_mlp(FILE* file, int batch_size) {
     // Read dimensions
-    int input_dim, hidden_dim, output_dim, stored_batch_size;
+    int input_dim, hidden_dim, output_dim;
     fread(&input_dim, sizeof(int), 1, file);
     fread(&hidden_dim, sizeof(int), 1, file);
     fread(&output_dim, sizeof(int), 1, file);
-    fread(&stored_batch_size, sizeof(int), 1, file);
     
-    // Use custom_batch_size if provided, otherwise use stored value
-    int batch_size = (custom_batch_size > 0) ? custom_batch_size : stored_batch_size;
-    
-    // Initialize network
+    // Initialize MLP
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size);
     
+    // Read weights
     int w1_size = input_dim * hidden_dim;
     int w2_size = hidden_dim * output_dim;
-    
-    // Load weights
     fread(mlp->W1, sizeof(float), w1_size, file);
     fread(mlp->W2, sizeof(float), w2_size, file);
     
-    // Load Adam state
+    // Read optimizer state
     fread(&mlp->t, sizeof(int), 1, file);
     fread(mlp->W1_m, sizeof(float), w1_size, file);
     fread(mlp->W1_v, sizeof(float), w1_size, file);
     fread(mlp->W2_m, sizeof(float), w2_size, file);
     fread(mlp->W2_v, sizeof(float), w2_size, file);
-
-    fclose(file);
-    printf("Model loaded from %s\n", filename);
     
     return mlp;
 }
