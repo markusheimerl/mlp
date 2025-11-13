@@ -3,12 +3,14 @@
 #include <math.h>
 #include <time.h>
 #include <cblas.h>
+#include <omp.h>
 #include "data.h"
 #include "mlp.h"
 
 int main() {
     srand(time(NULL));
-    openblas_set_num_threads(4);
+    omp_set_num_threads(4);
+    openblas_set_num_threads(1);
 
     // Parameters
     const int input_dim = 16;

@@ -75,6 +75,7 @@ void forward_pass_mlp(MLP* mlp, float* X) {
                 0.0f, mlp->preact, mlp->hidden_dim);
     
     // S = H⊙σ(H)
+    #pragma omp parallel for
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         mlp->postact[i] = mlp->preact[i] / (1.0f + expf(-mlp->preact[i]));
     }
@@ -129,6 +130,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
                 0.0f, mlp->grad_postact, mlp->hidden_dim);
     
     // ∂L/∂H = ∂L/∂S⊙[σ(H)+H⊙σ(H)⊙(1-σ(H))]
+    #pragma omp parallel for
     for (int i = 0; i < mlp->batch_size * mlp->hidden_dim; i++) {
         float h = mlp->preact[i];
         float sigmoid = 1.0f / (1.0f + expf(-h));

@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -lopenblas -lm -flto
+CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra -fopenmp
+LDFLAGS = -lopenblas -lm -flto -fopenmp
 
 train.out: mlp.o data.o train.o
 	$(CC) mlp.o data.o train.o $(LDFLAGS) -o $@
