@@ -50,16 +50,16 @@
 
 typedef struct {
     // Weights and gradients
-    __half* d_W1;      // [input_dim x hidden_dim]
-    __half* d_W2;      // [hidden_dim x output_dim]
-    __half* d_W1_grad; // [input_dim x hidden_dim]
-    __half* d_W2_grad; // [hidden_dim x output_dim]
+    float* d_W1;      // [input_dim x hidden_dim]
+    float* d_W2;      // [hidden_dim x output_dim]
+    float* d_W1_grad; // [input_dim x hidden_dim]
+    float* d_W2_grad; // [hidden_dim x output_dim]
     
-    // Adam parameters (kept in FP32 for precision)
-    float* d_W1_m;      // First moment for W1
-    float* d_W1_v;      // Second moment for W1
-    float* d_W2_m;      // First moment for W2
-    float* d_W2_v;      // Second moment for W2
+    // Adam parameters
+    __half* d_W1_m;     // First moment for W1
+    __half* d_W1_v;     // Second moment for W1
+    __half* d_W2_m;     // First moment for W2
+    __half* d_W2_v;     // Second moment for W2
     float beta1;        // Exponential decay rate for first moment
     float beta2;        // Exponential decay rate for second moment
     float epsilon;      // Small constant for numerical stability
@@ -67,13 +67,13 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Forward pass buffers
-    __half* d_preact;  // [batch_size x hidden_dim]
-    __half* d_postact; // [batch_size x hidden_dim]
-    __half* d_output;  // [batch_size x output_dim]
+    float* d_preact;  // [batch_size x hidden_dim]
+    float* d_postact; // [batch_size x hidden_dim]
+    float* d_output;  // [batch_size x output_dim]
 
     // Backward pass buffers
-    __half* d_grad_output;    // [batch_size x output_dim]
-    __half* d_grad_postact;   // [batch_size x hidden_dim]
+    float* d_grad_output;    // [batch_size x output_dim]
+    float* d_grad_postact;   // [batch_size x hidden_dim]
 
     // Loss computation buffer
     float* d_loss_result;   // [1]
@@ -99,10 +99,10 @@ typedef struct {
 // Function prototypes
 MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cublasLtHandle_t cublaslt_handle);
 void free_mlp(MLP* mlp);
-void forward_pass_mlp(MLP* mlp, __half* d_X);
-float calculate_loss_mlp(MLP* mlp, __half* d_y);
+void forward_pass_mlp(MLP* mlp, float* d_X);
+float calculate_loss_mlp(MLP* mlp, float* d_y);
 void zero_gradients_mlp(MLP* mlp);
-void backward_pass_mlp(MLP* mlp, __half* d_X, __half* d_grad_X);
+void backward_pass_mlp(MLP* mlp, float* d_X, float* d_grad_X);
 void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size);
 void reset_optimizer_mlp(MLP* mlp);
 void serialize_mlp(MLP* mlp, FILE* file);
