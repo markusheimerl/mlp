@@ -54,16 +54,18 @@ typedef struct {
     float* d_W1_grad; // [input_dim x hidden_dim]
     float* d_W2_grad; // [hidden_dim x output_dim]
     
-    // Adam parameters
+    // Adafactor parameters
     float* d_W1_m;      // First moment for W1
-    float* d_W1_v;      // Second moment for W1
+    float* d_W1_r;      // Row statistics for W1 [input_dim]
+    float* d_W1_c;      // Column statistics for W1 [hidden_dim]
     float* d_W2_m;      // First moment for W2
-    float* d_W2_v;      // Second moment for W2
+    float* d_W2_r;      // Row statistics for W2 [hidden_dim]
+    float* d_W2_c;      // Column statistics for W2 [output_dim]
     float beta1;        // Exponential decay rate for first moment
     float beta2;        // Exponential decay rate for second moment
     float epsilon;      // Small constant for numerical stability
     int t;              // Time step
-    float weight_decay; // Weight decay parameter for AdamW
+    float weight_decay; // Weight decay parameter for Adafactor
     
     // Forward pass buffers
     float* d_preact;  // [batch_size x hidden_dim]
@@ -76,6 +78,9 @@ typedef struct {
 
     // Loss computation buffer
     float* d_loss_result;   // [1]
+
+    // Adafactor working buffers
+    float* d_row_mean;      // [1] for computing mean of row statistics
 
     // cuBLASLt handle and descriptor
     cublasLtHandle_t cublaslt_handle;
