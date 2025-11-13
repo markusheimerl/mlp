@@ -126,7 +126,7 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
     cudaFree(mlp->d_preact); cudaFree(mlp->d_postact);
-    cudaFree(mlp->d_output); cudaFree(mlp->d_grad_output);
+    cudaFree(mlp->d_output);
     
     // Free loss computation buffer
     cudaFree(mlp->d_loss_result);

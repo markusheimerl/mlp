@@ -37,7 +37,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->postact = (float*)malloc(batch_size * hidden_dim * sizeof(float));
     mlp->output = (float*)malloc(batch_size * output_dim * sizeof(float));
     mlp->grad_postact = mlp->postact;
-    mlp->grad_output = (float*)malloc(batch_size * output_dim * sizeof(float));
+    mlp->grad_output = mlp->output;
     
     // Initialize weights
     float scale_W1 = 1.0f / sqrtf(input_dim);
@@ -61,7 +61,7 @@ void free_mlp(MLP* mlp) {
     free(mlp->W1_m); free(mlp->W1_v);
     free(mlp->W2_m); free(mlp->W2_v);
     free(mlp->preact); free(mlp->postact);
-    free(mlp->output); free(mlp->grad_output);
+    free(mlp->output);
     free(mlp);
 }
 
