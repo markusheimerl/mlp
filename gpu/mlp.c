@@ -85,7 +85,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
     
     // Create cuBLASLt matrix multiplication descriptor
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_desc, CUBLAS_COMPUTE_16F, CUDA_R_16F));
     
     // Row-major layout order
     cublasLtOrder_t order = CUBLASLT_ORDER_ROW;
@@ -166,8 +166,8 @@ __global__ static void swish_backward_kernel_mlp(__half* grad_hidden, __half* pr
 
 // Forward pass
 void forward_pass_mlp(MLP* mlp, __half* d_X) {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    const __half alpha = 1.0f;
+    const __half beta = 0.0f;
     
     // H = XW₁
     LT_MATMUL(mlp, CUBLAS_OP_N, CUBLAS_OP_N, &alpha,
@@ -236,8 +236,8 @@ void zero_gradients_mlp(MLP* mlp) {
 
 // Backward pass
 void backward_pass_mlp(MLP* mlp, __half* d_X, __half* d_grad_X) {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    const __half alpha = 1.0f;
+    const __half beta = 0.0f;
 
     // ∂L/∂W₂ = Sᵀ(∂L/∂Y)
     LT_MATMUL(mlp, CUBLAS_OP_T, CUBLAS_OP_N, &alpha,

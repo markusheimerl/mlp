@@ -37,10 +37,6 @@ int main() {
         y_half[i] = __float2half(y[i]);
     }
 
-    // Free the original FP32 input data, as it's replaced by the FP16 version
-    free(X);
-    // Note: The original FP32 `y` is kept for final verification metrics
-
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublaslt_handle);
     
@@ -105,10 +101,8 @@ int main() {
     fclose(model_file);
     printf("Model saved to %s\n", model_fname);
     
-    // Save original FP32 data
-    // To do this, we'd need to convert X_half back or not free X in the first place.
-    // For simplicity, we skip saving data in this modified version.
-    // save_data(X, y, num_samples, input_dim, output_dim, data_fname);
+    // Save data
+    save_data(X, y, num_samples, input_dim, output_dim, data_fname);
     
     // Load the model back and verify
     printf("\nVerifying saved model...\n");
@@ -166,6 +160,7 @@ int main() {
     }
     
     // Cleanup
+    free(X);
     free(y);
     free(X_half);
     free(y_half);
