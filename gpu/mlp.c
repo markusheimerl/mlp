@@ -58,9 +58,9 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMalloc(&mlp->d_postact, hidden_buffer_size * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&mlp->d_output, output_buffer_size * sizeof(float)));
     
-    // Alias/Allocate device memory for backward pass buffers
+    // Alias device memory for backward pass buffers
     mlp->d_grad_postact = mlp->d_postact;
-    CHECK_CUDA(cudaMalloc(&mlp->d_grad_output, output_buffer_size * sizeof(float)));
+    mlp->d_grad_output = mlp->d_output;
     
     // Allocate single device float for loss computation
     CHECK_CUDA(cudaMalloc(&mlp->d_loss_result, sizeof(float)));
@@ -126,7 +126,7 @@ void free_mlp(MLP* mlp) {
     cudaFree(mlp->d_W1_m); cudaFree(mlp->d_W1_v);
     cudaFree(mlp->d_W2_m); cudaFree(mlp->d_W2_v);
     cudaFree(mlp->d_preact); cudaFree(mlp->d_postact);
-    cudaFree(mlp->d_output); cudaFree(mlp->d_grad_output);
+    cudaFree(mlp->d_output);
     
     // Free loss computation buffer
     cudaFree(mlp->d_loss_result);
