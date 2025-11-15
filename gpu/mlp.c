@@ -20,10 +20,10 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     // Initialize cuBLASLt
     mlp->cublaslt_handle = cublaslt_handle;
     
-    int w1_size = input_dim * hidden_dim;
-    int w2_size = hidden_dim * output_dim;
-    int hidden_buffer_size = batch_size * hidden_dim;
-    int output_buffer_size = batch_size * output_dim;
+    size_t w1_size = input_dim * hidden_dim;
+    size_t w2_size = hidden_dim * output_dim;
+    size_t hidden_buffer_size = batch_size * hidden_dim;
+    size_t output_buffer_size = batch_size * output_dim;
     
     // Allocate host memory for weight initialization
     float* h_W1 = (float*)malloc(w1_size * sizeof(float));
@@ -33,11 +33,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     float scale_W1 = 1.0f / sqrtf(input_dim);
     float scale_W2 = 1.0f / sqrtf(hidden_dim);
     
-    for (int i = 0; i < w1_size; i++) {
+    for (size_t i = 0; i < w1_size; i++) {
         h_W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W1;
     }
     
-    for (int i = 0; i < w2_size; i++) {
+    for (size_t i = 0; i < w2_size; i++) {
         h_W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W2;
     }
     

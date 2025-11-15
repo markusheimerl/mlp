@@ -17,8 +17,8 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     mlp->t = 0;
     mlp->weight_decay = 0.01f;
     
-    int w1_size = input_dim * hidden_dim;
-    int w2_size = hidden_dim * output_dim;
+    size_t w1_size = input_dim * hidden_dim;
+    size_t w2_size = hidden_dim * output_dim;
     
     // Allocate weights and gradients
     mlp->W1 = (float*)malloc(w1_size * sizeof(float));
@@ -43,11 +43,11 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size) {
     float scale_W1 = 1.0f / sqrtf(input_dim);
     float scale_W2 = 1.0f / sqrtf(hidden_dim);
     
-    for (int i = 0; i < w1_size; i++) {
+    for (size_t i = 0; i < w1_size; i++) {
         mlp->W1[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W1;
     }
     
-    for (int i = 0; i < w2_size; i++) {
+    for (size_t i = 0; i < w2_size; i++) {
         mlp->W2[i] = ((float)rand() / (float)RAND_MAX * 2.0f - 1.0f) * scale_W2;
     }
     
