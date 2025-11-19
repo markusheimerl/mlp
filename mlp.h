@@ -48,7 +48,7 @@ void forward_pass_mlp(MLP* mlp, float* X);
 float calculate_loss_mlp(MLP* mlp, float* y);
 void zero_gradients_mlp(MLP* mlp);
 void backward_pass_mlp(MLP* mlp, float* X, float* grad_X);
-void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size);
+void update_weights_mlp(MLP* mlp, float learning_rate, int batch_size);
 void reset_optimizer_mlp(MLP* mlp);
 void serialize_mlp(MLP* mlp, FILE* file);
 MLP* deserialize_mlp(FILE* file, int batch_size);

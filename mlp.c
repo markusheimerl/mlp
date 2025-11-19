@@ -153,7 +153,7 @@ void backward_pass_mlp(MLP* mlp, float* X, float* grad_X) {
 }
 
 // Update weights using AdamW
-void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size) {
+void update_weights_mlp(MLP* mlp, float learning_rate, int batch_size) {
     mlp->t++;  // Increment time step
     
     float beta1_t = powf(mlp->beta1, mlp->t);
@@ -165,7 +165,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size)
     
     // Update W₁ weights
     for (int i = 0; i < w1_size; i++) {
-        float grad = mlp->W1_grad[i] / effective_batch_size;
+        float grad = mlp->W1_grad[i] / batch_size;
         
         // m = β₁m + (1-β₁)(∂L/∂W)
         mlp->W1_m[i] = mlp->beta1 * mlp->W1_m[i] + (1.0f - mlp->beta1) * grad;
@@ -179,7 +179,7 @@ void update_weights_mlp(MLP* mlp, float learning_rate, int effective_batch_size)
     
     // Update W₂ weights
     for (int i = 0; i < w2_size; i++) {
-        float grad = mlp->W2_grad[i] / effective_batch_size;
+        float grad = mlp->W2_grad[i] / batch_size;
 
         // m = β₁m + (1-β₁)(∂L/∂W)
         mlp->W2_m[i] = mlp->beta1 * mlp->W2_m[i] + (1.0f - mlp->beta1) * grad;
