@@ -76,7 +76,7 @@ MLP* init_mlp(int input_dim, int hidden_dim, int output_dim, int batch_size, cub
     CHECK_CUDA(cudaMemset(mlp->d_W2_v, 0, w2_size * sizeof(float)));
     
     // Create cuBLASLt matrix multiplication descriptor
-    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+    CHECK_CUBLASLT(cublasLtMatmulDescCreate(&mlp->matmul_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
     
     // Row-major layout order
     cublasLtOrder_t order = CUBLASLT_ORDER_ROW;
