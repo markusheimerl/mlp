@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <cuda_fp16.h>
 #include "../data.h"
 #include "mlp.h"
 
@@ -23,6 +24,12 @@ int main() {
     float *X, *y;
     generate_data(&X, &y, num_samples, input_dim, output_dim, -30.0f, 30.0f);
 
+    // Convert synthetic data to half precision
+    half *h_X = (half*)malloc(num_samples * input_dim * sizeof(half));
+    half *h_y = (half*)malloc(num_samples * output_dim * sizeof(half));
+    for (int i = 0; i < num_samples * input_dim; i++) h_X[i] = __float2half(X[i]);
+    for (int i = 0; i < num_samples * output_dim; i++) h_y[i] = __float2half(y[i]);
+
     // Initialize network
     MLP* mlp = init_mlp(input_dim, hidden_dim, output_dim, batch_size, cublaslt_handle);
     
@@ -32,9 +39,9 @@ int main() {
     const int num_batches = num_samples / batch_size;
     
     // Allocate device memory for batch data
-    float *d_X, *d_y;
-    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(float)));
+    half *d_X, *d_y;
+    CHECK_CUDA(cudaMalloc(&d_X, batch_size * input_dim * sizeof(half)));
+    CHECK_CUDA(cudaMalloc(&d_y, batch_size * output_dim * sizeof(half)));
     
     // Training loop
     for (int epoch = 0; epoch < num_epochs + 1; epoch++) {
@@ -43,8 +50,8 @@ int main() {
         for (int batch = 0; batch < num_batches; batch++) {
 
             // Copy batch data to device
-            CHECK_CUDA(cudaMemcpy(d_X, &X[batch * batch_size * input_dim], batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
-            CHECK_CUDA(cudaMemcpy(d_y, &y[batch * batch_size * output_dim], batch_size * output_dim * sizeof(float), cudaMemcpyHostToDevice));
+            CHECK_CUDA(cudaMemcpy(d_X, &h_X[batch * batch_size * input_dim], batch_size * input_dim * sizeof(half), cudaMemcpyHostToDevice));
+            CHECK_CUDA(cudaMemcpy(d_y, &h_y[batch * batch_size * output_dim], batch_size * output_dim * sizeof(half), cudaMemcpyHostToDevice));
             
             // Forward pass
             forward_pass_mlp(mlp, d_X);
@@ -96,12 +103,12 @@ int main() {
     printf("Model loaded from %s\n", model_fname);
     
     // Forward pass with loaded model on first batch
-    CHECK_CUDA(cudaMemcpy(d_X, X, batch_size * input_dim * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_X, h_X, batch_size * input_dim * sizeof(half), cudaMemcpyHostToDevice));
     forward_pass_mlp(loaded_mlp, d_X);
     
     // Copy predictions back to host
-    float* layer_output = (float*)malloc(batch_size * output_dim * sizeof(float));
-    CHECK_CUDA(cudaMemcpy(layer_output, loaded_mlp->d_output, batch_size * output_dim * sizeof(float), cudaMemcpyDeviceToHost));
+    half* h_output = (half*)malloc(batch_size * output_dim * sizeof(half));
+    CHECK_CUDA(cudaMemcpy(h_output, loaded_mlp->d_output, batch_size * output_dim * sizeof(half), cudaMemcpyDeviceToHost));
 
     // Evaluate model performance on first batch
     printf("Output\tR²\t\tMAE\t\tSample Predictions\n");
@@ -111,15 +118,15 @@ int main() {
         // Calculate mean for R²
         float y_mean = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            y_mean += y[j * output_dim + i];
+            y_mean += __half2float(h_y[j * output_dim + i]);
         }
         y_mean /= batch_size;
         
         // Calculate R² and MAE
         float ss_res = 0.0f, ss_tot = 0.0f, mae = 0.0f;
         for (int j = 0; j < batch_size; j++) {
-            float pred = layer_output[j * output_dim + i];
-            float actual = y[j * output_dim + i];
+            float pred = __half2float(h_output[j * output_dim + i]);
+            float actual = __half2float(h_y[j * output_dim + i]);
             float diff = pred - actual;
             
             ss_res += diff * diff;
@@ -133,8 +140,8 @@ int main() {
         // Print summary
         printf("y%d\t%.6f\t%.3f\t\t", i, r2, mae);
         for (int j = 0; j < 3; j++) {
-            float pred = layer_output[j * output_dim + i];
-            float actual = y[j * output_dim + i];
+            float pred = __half2float(h_output[j * output_dim + i]);
+            float actual = __half2float(h_y[j * output_dim + i]);
             printf("%.2f/%.2f ", pred, actual);
         }
         printf("\n");
@@ -143,7 +150,9 @@ int main() {
     // Cleanup
     free(X);
     free(y);
-    free(layer_output);
+    free(h_X);
+    free(h_y);
+    free(h_output);
     CHECK_CUDA(cudaFree(d_X));
     CHECK_CUDA(cudaFree(d_y));
     free_mlp(mlp);
