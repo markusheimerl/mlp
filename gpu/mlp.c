@@ -340,33 +340,46 @@ void serialize_mlp(MLP* mlp, FILE* file) {
     int w1_size = mlp->input_dim * mlp->hidden_dim;
     int w2_size = mlp->hidden_dim * mlp->output_dim;
     
-    // Allocate host buffers
-    half* h_W1 = (half*)malloc(w1_size * sizeof(half));
-    half* h_W2 = (half*)malloc(w2_size * sizeof(half));
+    // Allocate host buffers for weights
+    float* h_W1 = (float*)malloc(w1_size * sizeof(float));
+    float* h_W2 = (float*)malloc(w2_size * sizeof(float));
+    
+    // Copy weights from device
+    CHECK_CUDA(cudaMemcpy(h_W1, mlp->d_W1, w1_size * sizeof(half), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_W2, mlp->d_W2, w2_size * sizeof(half), cudaMemcpyDeviceToHost));
+    
+    // Convert half to float
+    for (int i = w1_size - 1; i >= 0; i--) h_W1[i] = __half2float(((half*)h_W1)[i]);
+    for (int i = w2_size - 1; i >= 0; i--) h_W2[i] = __half2float(((half*)h_W2)[i]);
+    
+    // Write weights
+    fwrite(h_W1, sizeof(float), w1_size, file);
+    fwrite(h_W2, sizeof(float), w2_size, file);
+    
+    free(h_W1); free(h_W2);
+    
+    // Write optimizer state
+    fwrite(&mlp->t, sizeof(int), 1, file);
+    
+    // Allocate host buffers for optimizer state
     float* h_W1_m = (float*)malloc(w1_size * sizeof(float));
     float* h_W1_v = (float*)malloc(w1_size * sizeof(float));
     float* h_W2_m = (float*)malloc(w2_size * sizeof(float));
     float* h_W2_v = (float*)malloc(w2_size * sizeof(float));
     
-    // Copy from device
-    CHECK_CUDA(cudaMemcpy(h_W1, mlp->d_W1, w1_size * sizeof(half), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(h_W2, mlp->d_W2, w2_size * sizeof(half), cudaMemcpyDeviceToHost));
+    // Copy optimizer state from device
     CHECK_CUDA(cudaMemcpy(h_W1_m, mlp->d_W1_m, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W1_v, mlp->d_W1_v, w1_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W2_m, mlp->d_W2_m, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
     CHECK_CUDA(cudaMemcpy(h_W2_v, mlp->d_W2_v, w2_size * sizeof(float), cudaMemcpyDeviceToHost));
     
-    // Write to file
-    fwrite(h_W1, sizeof(half), w1_size, file);
-    fwrite(h_W2, sizeof(half), w2_size, file);
-    fwrite(&mlp->t, sizeof(int), 1, file);
+    // Write optimizer state
     fwrite(h_W1_m, sizeof(float), w1_size, file);
     fwrite(h_W1_v, sizeof(float), w1_size, file);
     fwrite(h_W2_m, sizeof(float), w2_size, file);
     fwrite(h_W2_v, sizeof(float), w2_size, file);
     
     // Free host buffers
-    free(h_W1); free(h_W2);
     free(h_W1_m); free(h_W1_v);
     free(h_W2_m); free(h_W2_v);
 }
@@ -385,33 +398,46 @@ MLP* deserialize_mlp(FILE* file, int batch_size, cublasLtHandle_t cublaslt_handl
     int w1_size = input_dim * hidden_dim;
     int w2_size = hidden_dim * output_dim;
     
-    // Allocate host buffers
-    half* h_W1 = (half*)malloc(w1_size * sizeof(half));
-    half* h_W2 = (half*)malloc(w2_size * sizeof(half));
+    // Allocate host buffers for weights
+    float* h_W1 = (float*)malloc(w1_size * sizeof(float));
+    float* h_W2 = (float*)malloc(w2_size * sizeof(float));
+    
+    // Read weights
+    fread(h_W1, sizeof(float), w1_size, file);
+    fread(h_W2, sizeof(float), w2_size, file);
+    
+    // Convert float to half
+    for (int i = 0; i < w1_size; i++) ((half*)h_W1)[i] = __float2half(h_W1[i]);
+    for (int i = 0; i < w2_size; i++) ((half*)h_W2)[i] = __float2half(h_W2[i]);
+    
+    // Copy weights to device
+    CHECK_CUDA(cudaMemcpy(mlp->d_W1, h_W1, w1_size * sizeof(half), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(mlp->d_W2, h_W2, w2_size * sizeof(half), cudaMemcpyHostToDevice));
+    
+    free(h_W1); free(h_W2);
+    
+    // Read optimizer state
+    fread(&mlp->t, sizeof(int), 1, file);
+    
+    // Allocate host buffers for optimizer state
     float* h_W1_m = (float*)malloc(w1_size * sizeof(float));
     float* h_W1_v = (float*)malloc(w1_size * sizeof(float));
     float* h_W2_m = (float*)malloc(w2_size * sizeof(float));
     float* h_W2_v = (float*)malloc(w2_size * sizeof(float));
     
-    // Read from file
-    fread(h_W1, sizeof(half), w1_size, file);
-    fread(h_W2, sizeof(half), w2_size, file);
-    fread(&mlp->t, sizeof(int), 1, file);
+    // Read optimizer state
     fread(h_W1_m, sizeof(float), w1_size, file);
     fread(h_W1_v, sizeof(float), w1_size, file);
     fread(h_W2_m, sizeof(float), w2_size, file);
     fread(h_W2_v, sizeof(float), w2_size, file);
     
-    // Copy to device
-    CHECK_CUDA(cudaMemcpy(mlp->d_W1, h_W1, w1_size * sizeof(half), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(mlp->d_W2, h_W2, w2_size * sizeof(half), cudaMemcpyHostToDevice));
+    // Copy optimizer state to device
     CHECK_CUDA(cudaMemcpy(mlp->d_W1_m, h_W1_m, w1_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W1_v, h_W1_v, w1_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W2_m, h_W2_m, w2_size * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(mlp->d_W2_v, h_W2_v, w2_size * sizeof(float), cudaMemcpyHostToDevice));
     
     // Free host buffers
-    free(h_W1); free(h_W2);
     free(h_W1_m); free(h_W1_v);
     free(h_W2_m); free(h_W2_v);
     
