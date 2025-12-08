@@ -51,13 +51,17 @@
 typedef struct {
     // Weights and gradients
     half* d_W1;      // [input_dim x hidden_dim]
+    half* d_W_gate;  // [input_dim x hidden_dim]
     half* d_W2;      // [hidden_dim x output_dim]
     half* d_W1_grad; // [input_dim x hidden_dim]
+    half* d_W_gate_grad; // [input_dim x hidden_dim]
     half* d_W2_grad; // [hidden_dim x output_dim]
     
     // Adam parameters
     float* d_W1_m;      // First moment for W1
     float* d_W1_v;      // Second moment for W1
+    float* d_W_gate_m;  // First moment for W_gate
+    float* d_W_gate_v;  // Second moment for W_gate
     float* d_W2_m;      // First moment for W2
     float* d_W2_v;      // Second moment for W2
     float beta1;        // Exponential decay rate for first moment
@@ -67,7 +71,8 @@ typedef struct {
     float weight_decay; // Weight decay parameter for AdamW
     
     // Forward pass buffers
-    half* d_preact;  // [batch_size x hidden_dim]
+    half* d_hidden;  // [batch_size x hidden_dim]
+    half* d_gate;    // [batch_size x hidden_dim]
     half* d_postact; // [batch_size x hidden_dim]
     half* d_output;  // [batch_size x output_dim]
 

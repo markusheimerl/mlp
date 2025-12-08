@@ -22,7 +22,7 @@ int main() {
     
     // Generate synthetic data
     float *X, *y;
-    generate_data(&X, &y, num_samples, input_dim, output_dim, -30.0f, 30.0f);
+    generate_data(&X, &y, num_samples, input_dim, output_dim, -5.0f, 5.0f);
 
     // Convert synthetic data to half precision
     half *h_X = (half*)malloc(num_samples * input_dim * sizeof(half));
